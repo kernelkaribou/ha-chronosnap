@@ -153,6 +153,38 @@ Entity enters active state
   Delete job if auto-cleanup is enabled (video preserved)
 ```
 
+## Troubleshooting
+
+### Integration icon not showing
+
+Home Assistant requires all brand image variants to be present. Make sure `custom_components/chronosnap/brand/` contains `icon.png`, `dark_icon.png`, `icon@2x.png`, `dark_icon@2x.png`, and the corresponding logo files. After updating, fully restart Home Assistant and hard-refresh your browser (Ctrl+F5).
+
+### Cannot connect during setup
+
+Home Assistant may resolve hostnames differently than your browser. If your ChronoSnap server is on the same network, try using the internal IP address instead of a domain name.
+
+### Profile stuck in error state
+
+If the ChronoSnap API was temporarily unavailable when a stop was triggered, the integration retries up to 3 times. If all retries fail, the profile enters an error state but the job remains tracked. The next time the entity triggers a stop, it will retry. You can also restart Home Assistant to re-evaluate the job.
+
+### Orphaned jobs on ChronoSnap
+
+If Home Assistant restarts while a job is active, the integration will attempt to restore and manage it on startup. If the API is unreachable at startup, stored job IDs are preserved until connectivity is restored. If a job is orphaned, you can delete it manually from the ChronoSnap UI.
+
+### Target duration mode falling back to fixed interval
+
+If the duration source entity is unavailable, returns an unparseable value, or the remaining time is zero/negative, the integration logs a warning and falls back to the fixed capture interval setting. Check **Settings** > **System** > **Logs** and filter for `chronosnap` to see details.
+
+### Viewing logs
+
+All integration log entries are prefixed with `chronosnap`. To view them, go to **Settings** > **System** > **Logs** and search for `chronosnap`. For more verbose output, add this to your `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.chronosnap: debug
+```
+
 ## Requirements
 
 - [ChronoSnap](https://github.com/kernelkaribou/chronosnap) instance with API key configured
