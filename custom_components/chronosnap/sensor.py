@@ -8,12 +8,14 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_ACTIVE_STATE,
     CONF_PROFILE_NAME,
     CONF_PROFILES,
+    CONF_STREAM_URL,
     CONF_TRIGGER_ENTITY,
     DOMAIN,
     STATUS_BUILDING,
@@ -33,6 +35,19 @@ STATUS_ICONS = {
 }
 
 
+def _device_info(entry: ConfigEntry, profile_id: str, profile: dict[str, Any]) -> DeviceInfo:
+    """Build DeviceInfo for a timelapse profile."""
+    name = profile.get(CONF_PROFILE_NAME, profile_id)
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{entry.entry_id}_{profile_id}")},
+        name=name,
+        manufacturer="ChronoSnap",
+        model="Timelapse Profile",
+        configuration_url=entry.data.get("url"),
+        entry_type=None,
+    )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -45,10 +60,10 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     for profile_id, profile in profiles.items():
         entities.append(
-            ChronoSnapStatusSensor(coordinator, profile_id, profile)
+            ChronoSnapStatusSensor(coordinator, entry, profile_id, profile)
         )
         entities.append(
-            ChronoSnapCaptureCountSensor(coordinator, profile_id, profile)
+            ChronoSnapCaptureCountSensor(coordinator, entry, profile_id, profile)
         )
 
     async_add_entities(entities)
@@ -57,22 +72,23 @@ async def async_setup_entry(
 class ChronoSnapStatusSensor(SensorEntity):
     """Sensor showing the current status of a timelapse profile."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(
         self,
         coordinator: ProfileCoordinator,
+        entry: ConfigEntry,
         profile_id: str,
         profile: dict[str, Any],
     ) -> None:
         self._coordinator = coordinator
         self._profile_id = profile_id
         self._profile = profile
-        name = profile.get(CONF_PROFILE_NAME, profile_id)
 
         self._attr_unique_id = f"{DOMAIN}_{profile_id}_status"
-        self._attr_name = f"ChronoSnap {name} Status"
+        self._attr_name = "Status"
         self._attr_icon = STATUS_ICONS.get(STATUS_IDLE, "mdi:camera")
+        self._attr_device_info = _device_info(entry, profile_id, profile)
 
     @property
     def native_value(self) -> str:
@@ -119,23 +135,24 @@ class ChronoSnapStatusSensor(SensorEntity):
 class ChronoSnapCaptureCountSensor(SensorEntity):
     """Sensor showing the capture count for the active job."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(
         self,
         coordinator: ProfileCoordinator,
+        entry: ConfigEntry,
         profile_id: str,
         profile: dict[str, Any],
     ) -> None:
         self._coordinator = coordinator
         self._profile_id = profile_id
         self._profile = profile
-        name = profile.get(CONF_PROFILE_NAME, profile_id)
 
         self._attr_unique_id = f"{DOMAIN}_{profile_id}_captures"
-        self._attr_name = f"ChronoSnap {name} Captures"
+        self._attr_name = "Captures"
         self._attr_icon = "mdi:image-multiple"
         self._attr_native_unit_of_measurement = "frames"
+        self._attr_device_info = _device_info(entry, profile_id, profile)
 
     @property
     def native_value(self) -> int:
