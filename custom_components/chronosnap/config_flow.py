@@ -35,6 +35,7 @@ from .const import (
     CONF_DURATION_ENTITY,
     CONF_EXCLUDE_STATES,
     CONF_FPS,
+    CONF_INSTANCE_NAME,
     CONF_INTERVAL_MODE,
     CONF_INTERVAL_SECONDS,
     CONF_PROFILE_NAME,
@@ -89,6 +90,9 @@ class ChronoSnapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             url = user_input[CONF_URL].rstrip("/")
             api_key = user_input[CONF_API_KEY]
+            instance_name = user_input.get(
+                CONF_INSTANCE_NAME, "ChronoSnap"
+            ).strip() or "ChronoSnap"
 
             client = ChronoSnapClient(url, api_key)
             try:
@@ -110,8 +114,12 @@ class ChronoSnapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(url)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title="ChronoSnap",
-                    data={CONF_URL: url, CONF_API_KEY: api_key},
+                    title=instance_name,
+                    data={
+                        CONF_URL: url,
+                        CONF_API_KEY: api_key,
+                        CONF_INSTANCE_NAME: instance_name,
+                    },
                     options={CONF_PROFILES: {}},
                 )
 
@@ -119,6 +127,9 @@ class ChronoSnapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
+                    vol.Optional(
+                        CONF_INSTANCE_NAME, default="ChronoSnap"
+                    ): TextSelector(TextSelectorConfig()),
                     vol.Required(CONF_URL, default="http://"): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.URL)
                     ),

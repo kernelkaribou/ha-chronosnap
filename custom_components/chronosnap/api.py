@@ -209,3 +209,20 @@ class ChronoSnapClient:
         """Get all available tags."""
         result = await self._request("GET", "/tags/")
         return result if isinstance(result, list) else []
+
+    # ── Server stats ───────────────────────────────────────────
+
+    async def get_storage_stats(self) -> dict[str, Any]:
+        """Get server storage statistics."""
+        result = await self._request("GET", "/storage/stats")
+        return result or {}
+
+    async def get_jobs(
+        self, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        """List jobs, optionally filtered by status."""
+        path = "/jobs/"
+        if status:
+            path = f"/jobs/?status={status}"
+        result = await self._request("GET", path)
+        return result if isinstance(result, list) else []

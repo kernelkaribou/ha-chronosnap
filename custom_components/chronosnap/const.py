@@ -5,6 +5,7 @@ DOMAIN = "chronosnap"
 # Config entry keys
 CONF_URL = "url"
 CONF_API_KEY = "api_key"
+CONF_INSTANCE_NAME = "instance_name"
 CONF_PROFILES = "profiles"
 
 # Profile keys
@@ -66,6 +67,9 @@ MIN_INTERVAL_SECONDS = 10
 # Video polling
 VIDEO_POLL_INTERVAL = 30  # seconds between status checks
 VIDEO_POLL_TIMEOUT = 3600  # max seconds to wait for video build (1 hour)
+
+# Server stats polling
+SERVER_STATS_POLL_INTERVAL = 60  # seconds between stats updates
 
 # Storage
 STORAGE_KEY = f"{DOMAIN}_active_jobs"
