@@ -1,0 +1,12 @@
+{
+  "domain": "chronosnap",
+  "name": "ChronoSnap",
+  "version": "1.0.0",
+  "documentation": "https://github.com/kernelkaribou/ha-chronosnap/blob/main/README.md",
+  "issue_tracker": "https://github.com/kernelkaribou/ha-chronosnap/issues",
+  "requirements": ["aiohttp>=3.8.0"],
+  "dependencies": [],
+  "codeowners": ["@kernelkaribou"],
+  "config_flow": true,
+  "iot_class": "local_polling"
+}

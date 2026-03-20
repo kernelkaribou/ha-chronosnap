@@ -1,0 +1,97 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to ChronoSnap",
+        "description": "Enter the URL and API key for your ChronoSnap server.",
+        "data": {
+          "url": "Server URL",
+          "api_key": "API Key"
+        },
+        "data_description": {
+          "url": "The base URL of your ChronoSnap instance (e.g., http://192.168.1.100:5000)",
+          "api_key": "Found in ChronoSnap Settings → API Key"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to ChronoSnap server. Check the URL and ensure the server is running.",
+      "invalid_auth": "Invalid API key. Check your API key in ChronoSnap Settings.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This ChronoSnap server is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Timelapse Profiles",
+        "description": "Manage your timelapse profiles. Each profile watches an entity and automatically creates timelapses.",
+        "data": {
+          "action": "Select an action"
+        }
+      },
+      "profile_action": {
+        "title": "Profile Action",
+        "data": {
+          "action": "What would you like to do?"
+        }
+      },
+      "profile_basic": {
+        "title": "Profile Setup",
+        "description": "Configure the stream source and trigger entity for this profile.",
+        "data": {
+          "name": "Profile name",
+          "stream_url": "Camera stream URL",
+          "stream_type": "Stream type",
+          "trigger_entity": "Trigger entity",
+          "active_state": "Active state",
+          "debounce_seconds": "Stop debounce delay"
+        },
+        "data_description": {
+          "name": "A friendly name for this timelapse profile",
+          "stream_url": "The RTSP, HTTP, or device URL for the camera",
+          "stream_type": "The protocol type of the camera stream",
+          "trigger_entity": "The entity to watch for state changes",
+          "active_state": "Capture starts when the entity enters this state and stops when it leaves (e.g., 'printing')",
+          "debounce_seconds": "Seconds to wait before stopping after the entity leaves the active state (prevents false triggers)"
+        }
+      },
+      "profile_capture": {
+        "title": "Capture & Video Settings",
+        "description": "Configure how frames are captured and how the timelapse video is built.",
+        "data": {
+          "interval_mode": "Interval mode",
+          "interval_seconds": "Capture interval (for fixed mode)",
+          "fps": "Video framerate",
+          "quality": "Video quality",
+          "capture_quality": "Capture image quality",
+          "resolution": "Video resolution",
+          "auto_cleanup": "Auto-delete job after video is built"
+        },
+        "data_description": {
+          "interval_mode": "Fixed: capture at a set interval. Target duration: calculate interval to produce a specific video length.",
+          "interval_seconds": "Seconds between captures (minimum 10). Only used in fixed mode.",
+          "fps": "Frames per second for the output timelapse video",
+          "quality": "Encoding quality for the output video",
+          "capture_quality": "Image quality for each captured frame",
+          "resolution": "Output video resolution (e.g., 1920x1080)",
+          "auto_cleanup": "When enabled, the capture job and its raw frames are automatically deleted after the video is built. The video itself is always preserved."
+        }
+      },
+      "profile_target": {
+        "title": "Target Duration Settings",
+        "description": "The capture interval will be calculated so the final video is approximately the target duration. Formula: entity_value ÷ (target_duration × fps), minimum 10 seconds.",
+        "data": {
+          "target_duration": "Target video duration",
+          "duration_entity": "Duration source entity"
+        },
+        "data_description": {
+          "target_duration": "Desired length of the final timelapse video in seconds",
+          "duration_entity": "Entity whose state contains the total expected duration in seconds (e.g., a sensor showing estimated print time remaining)"
+        }
+      }
+    }
+  }
+}
