@@ -142,7 +142,6 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
     """Handle timelapse profile management."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
         self._profiles: dict[str, dict[str, Any]] = dict(
             config_entry.options.get(CONF_PROFILES, {})
         )
