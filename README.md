@@ -155,14 +155,6 @@ Entity enters active state
 
 ## Troubleshooting
 
-### Integration icon not showing
-
-Home Assistant requires all brand image variants to be present. Make sure `custom_components/chronosnap/brand/` contains `icon.png`, `dark_icon.png`, `icon@2x.png`, `dark_icon@2x.png`, and the corresponding logo files. After updating, fully restart Home Assistant and hard-refresh your browser (Ctrl+F5).
-
-### Cannot connect during setup
-
-Home Assistant may resolve hostnames differently than your browser. If your ChronoSnap server is on the same network, try using the internal IP address instead of a domain name.
-
 ### Profile stuck in error state
 
 If the ChronoSnap API was temporarily unavailable when a stop was triggered, the integration retries up to 3 times. If all retries fail, the profile enters an error state but the job remains tracked. The next time the entity triggers a stop, it will retry. You can also restart Home Assistant to re-evaluate the job.
