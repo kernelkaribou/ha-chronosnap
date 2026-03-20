@@ -93,6 +93,9 @@ class ChronoSnapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
             except ChronoSnapConnectionError:
                 errors["base"] = "cannot_connect"
+            except ChronoSnapError as err:
+                _LOGGER.error("ChronoSnap API error during setup: %s", err)
+                errors["base"] = "cannot_connect"
             except Exception:
                 _LOGGER.exception("Unexpected error during setup")
                 errors["base"] = "unknown"
