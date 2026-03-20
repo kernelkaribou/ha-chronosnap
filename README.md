@@ -157,7 +157,7 @@ Entity enters active state
 
 ### Profile stuck in error state
 
-If the ChronoSnap API was temporarily unavailable when a stop was triggered, the integration retries up to 3 times. If all retries fail, the profile enters an error state but the job remains tracked. The next time the entity triggers a stop, it will retry. You can also restart Home Assistant to re-evaluate the job.
+If the ChronoSnap API was temporarily unavailable when a stop was triggered, the integration retries up to 3 times. If all retries fail, the profile enters an error state but the job remains tracked. Restarting Home Assistant will re-evaluate the job and attempt to manage it. You can also manually complete or delete the job from the ChronoSnap UI.
 
 ### Orphaned jobs on ChronoSnap
 
