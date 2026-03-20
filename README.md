@@ -4,16 +4,14 @@
 
 A Home Assistant custom integration for [ChronoSnap](https://github.com/kernelkaribou/chronosnap) that turns entity state changes into automated timelapses.
 
-## What It Does
+## Examples
 
-ChronoSnap for Home Assistant watches your entities and automatically manages timelapse capture jobs. An entity enters a configured state, the integration creates a capture job on your ChronoSnap server, frames are captured at a calculated interval, and when the entity leaves that state the job is completed, a timelapse video is built, and raw captures are cleaned up. Everything is hands-off once configured.
-
-**Example use cases:**
 - Timelapse every 3D print from start to finish, triggered by your printer's status entity
 - Capture what your dog gets up to when the house is detected as empty
 - Timelapse your backyard camera as a storm rolls through, triggered by a weather sensor
 - Capture a daily sunrise or sunset from an outdoor camera using a sun elevation sensor
 - Timelapse your garage workbench whenever a presence sensor detects someone in the shop
+- And more ...
 
 ## Features
 
