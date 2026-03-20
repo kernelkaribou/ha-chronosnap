@@ -55,8 +55,8 @@
           "stream_url": "The RTSP, HTTP, or device URL for the camera",
           "stream_type": "The protocol type of the camera stream",
           "trigger_entity": "The entity to watch for state changes",
-          "active_state": "Capture starts when the entity enters this state and stops when it leaves (e.g., 'printing')",
-          "exclude_states": "Comma-separated states that should NOT trigger a stop (e.g., 'paused, filament_change'). If the entity enters one of these states, capturing continues.",
+          "active_state": "Capture starts when the entity enters this state and stops when it leaves",
+          "exclude_states": "Comma-separated states that should NOT trigger a stop. If the entity enters one of these states, capturing continues.",
           "debounce_seconds": "Seconds to wait before stopping after the entity leaves the active state (prevents false triggers)"
         }
       },
@@ -93,7 +93,7 @@
         },
         "data_description": {
           "target_duration": "Desired length of the final timelapse video in seconds",
-          "duration_entity": "Entity whose state contains the total expected duration in seconds (e.g., a sensor showing estimated print time remaining)"
+          "duration_entity": "Entity whose state contains the total expected duration in seconds"
         }
       }
     }

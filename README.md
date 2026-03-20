@@ -6,13 +6,13 @@ A Home Assistant custom integration that automatically creates [ChronoSnap](http
 
 ## What It Does
 
-Define **timelapse profiles** that watch any Home Assistant entity. When the entity enters a configured state (e.g., a 3D printer starts printing), ChronoSnap automatically begins capturing frames from a camera stream. When the entity leaves that state, it builds a timelapse video and cleans up.
+Define **timelapse profiles** that watch any Home Assistant entity. When the entity enters a configured state, ChronoSnap automatically begins capturing frames from a camera stream. When the entity leaves that state, it builds a timelapse video and cleans up.
 
 **Example use cases:**
-- 🖨️ **3D printing** — Timelapse every print via PrusaLink/OctoPrint status
-- 🌱 **Plant growth** — Daily timelapse triggered by a schedule helper
-- 🏗️ **Construction** — Capture during daylight hours via a sun entity
-- 🎨 **Any state-driven event** — If HA can track it, ChronoSnap can timelapse it
+- Timelapse any automated process by watching its status entity
+- Daily or scheduled timelapses triggered by a helper entity
+- Capture during specific conditions using any sensor state
+- Any state-driven event that HA can track
 
 ## Features
 
@@ -53,11 +53,11 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
 1. Go to **Settings** → **Devices & Services** → **ChronoSnap** → **Configure**
 2. Click **➕ Add new profile**
 3. **Step 1 — Profile Setup:**
-   - **Name:** A friendly name (e.g., "Prusa 3D Print")
+   - **Name:** A friendly name for this profile
    - **Camera stream URL:** RTSP/HTTP URL for the camera
    - **Stream type:** RTSP, HTTP, or local device
-   - **Trigger entity:** The HA entity to watch (e.g., `sensor.prusalink_printer_state`)
-   - **Active state:** The state value that triggers capture (e.g., `printing`)
+   - **Trigger entity:** The HA entity to watch for state changes
+   - **Active state:** The state value that triggers capture
    - **Debounce:** Seconds to wait before stopping (prevents false triggers from brief state changes)
 4. **Step 2 — Capture & Video Settings:**
    - **Interval mode:** Fixed or target duration
@@ -65,7 +65,7 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
    - **Auto-cleanup:** Delete raw captures after video is built
 5. *(If target duration mode)* **Step 3 — Target Duration:**
    - **Target video duration:** Desired timelapse length in seconds
-   - **Duration source entity:** Entity whose state contains the total expected time (e.g., `sensor.prusalink_print_time_remaining`)
+   - **Duration source entity:** Entity whose state contains the total expected duration in seconds
 
 ## Sensors
 
@@ -111,7 +111,7 @@ Instead of a fixed capture interval, you can specify a desired video length. The
 interval = total_time_seconds / (target_duration × fps)
 ```
 
-For example, with a 4-hour print, target of 30s at 30fps:
+For example, with a 4-hour process, target of 30s at 30fps:
 - Total frames needed: 30 × 30 = 900
 - Interval: 14400 / 900 = 16 seconds
 

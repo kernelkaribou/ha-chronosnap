@@ -57,7 +57,7 @@ async def async_setup_entry(
 class ChronoSnapStatusSensor(SensorEntity):
     """Sensor showing the current status of a timelapse profile."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -71,7 +71,7 @@ class ChronoSnapStatusSensor(SensorEntity):
         name = profile.get(CONF_PROFILE_NAME, profile_id)
 
         self._attr_unique_id = f"{DOMAIN}_{profile_id}_status"
-        self._attr_name = f"{name} Status"
+        self._attr_name = f"ChronoSnap {name} Status"
         self._attr_icon = STATUS_ICONS.get(STATUS_IDLE, "mdi:camera")
 
     @property
@@ -119,7 +119,7 @@ class ChronoSnapStatusSensor(SensorEntity):
 class ChronoSnapCaptureCountSensor(SensorEntity):
     """Sensor showing the capture count for the active job."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -133,7 +133,7 @@ class ChronoSnapCaptureCountSensor(SensorEntity):
         name = profile.get(CONF_PROFILE_NAME, profile_id)
 
         self._attr_unique_id = f"{DOMAIN}_{profile_id}_captures"
-        self._attr_name = f"{name} Captures"
+        self._attr_name = f"ChronoSnap {name} Captures"
         self._attr_icon = "mdi:image-multiple"
         self._attr_native_unit_of_measurement = "frames"
 

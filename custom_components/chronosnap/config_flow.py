@@ -169,26 +169,15 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
             return await self.async_step_profile_action()
 
         # Build menu: list existing profiles + add option
-        options = []
-        for pid, profile in self._profiles.items():
-            name = profile.get(CONF_PROFILE_NAME, pid)
-            entity = profile.get(CONF_TRIGGER_ENTITY, "?")
-            state = profile.get(CONF_ACTIVE_STATE, "?")
-            options.append(
-                SelectSelectorConfig(
-                    options=[{"value": pid, "label": f"✏️ {name} ({entity} → {state})"}]
-                )
-            )
-
-        menu_options = [{"value": "add", "label": "➕ Add new profile"}]
+        menu_options = [{"value": "add", "label": "Add new profile"}]
         for pid, profile in self._profiles.items():
             name = profile.get(CONF_PROFILE_NAME, pid)
             entity = profile.get(CONF_TRIGGER_ENTITY, "?")
             state = profile.get(CONF_ACTIVE_STATE, "?")
             menu_options.append(
-                {"value": pid, "label": f"✏️ {name} ({entity} → {state})"}
+                {"value": pid, "label": f"{name} ({entity} / {state})"}
             )
-        menu_options.append({"value": "done", "label": "✅ Save & close"})
+        menu_options.append({"value": "done", "label": "Save & close"})
 
         return self.async_show_form(
             step_id="init",
