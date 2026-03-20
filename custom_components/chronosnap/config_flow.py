@@ -150,6 +150,12 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
         self._editing_profile_id: str | None = None
         self._available_tags: list[dict[str, Any]] = []
 
+    def _save_and_finish(self) -> config_entries.ConfigFlowResult:
+        """Save profiles and close the options flow."""
+        return self.async_create_entry(
+            data={CONF_PROFILES: self._profiles}
+        )
+
     # ── Main menu ───────────────────────────────────────────
 
     async def async_step_init(
@@ -160,10 +166,6 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
             action = user_input.get("action")
             if action == "add":
                 return await self.async_step_profile_basic()
-            if action == "done":
-                return self.async_create_entry(
-                    data={CONF_PROFILES: self._profiles}
-                )
             # action is a profile ID to edit/delete
             self._editing_profile_id = action
             return await self.async_step_profile_action()
@@ -172,12 +174,9 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
         menu_options = [{"value": "add", "label": "Add new profile"}]
         for pid, profile in self._profiles.items():
             name = profile.get(CONF_PROFILE_NAME, pid)
-            entity = profile.get(CONF_TRIGGER_ENTITY, "?")
-            state = profile.get(CONF_ACTIVE_STATE, "?")
             menu_options.append(
-                {"value": pid, "label": f"{name} ({entity} / {state})"}
+                {"value": pid, "label": name}
             )
-        menu_options.append({"value": "done", "label": "Save & close"})
 
         return self.async_show_form(
             step_id="init",
@@ -203,7 +202,8 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
             action = user_input.get("action")
             if action == "delete":
                 self._profiles.pop(self._editing_profile_id, None)
-                return await self.async_step_init()
+                self._editing_profile_id = None
+                return self._save_and_finish()
             if action == "edit":
                 return await self.async_step_profile_basic()
             return await self.async_step_init()
@@ -333,7 +333,7 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_profile_target()
 
             self._editing_profile_id = None
-            return await self.async_step_init()
+            return self._save_and_finish()
 
         existing = self._profiles.get(self._editing_profile_id, {})
 
@@ -464,7 +464,7 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             self._profiles[self._editing_profile_id].update(user_input)
             self._editing_profile_id = None
-            return await self.async_step_init()
+            return self._save_and_finish()
 
         existing = self._profiles.get(self._editing_profile_id, {})
 
