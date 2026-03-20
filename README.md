@@ -17,18 +17,18 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
 
 ## Features
 
-- **UI-based configuration** — No YAML editing required
-- **Entity & state selectors** — Pick entities from dropdowns
-- **Multiple profiles** — Run different timelapses simultaneously
+- **UI-based configuration** - no YAML editing required
+- **Entity & state selectors** - pick entities from dropdowns
+- **Multiple profiles** - run different timelapses simultaneously
 - **Flexible intervals:**
-  - **Fixed** — Capture every N seconds
-  - **Target duration** — Automatically calculate interval so the timelapse is a specific length (e.g., always 30 seconds)
-- **Start delay** — Configurable grace period before job creation, so brief/cancelled triggers are ignored
-- **Stop debounce** — Configurable delay before stopping to prevent false triggers
-- **Exclude states** — Temporary states that should not interrupt an active capture
-- **Tags** — Apply ChronoSnap tags to jobs and videos
-- **Auto-cleanup** — Optionally delete raw captures after the video is built
-- **Restart-safe** — Active job IDs are persisted and restored on HA restart
+  - **Fixed** - capture every N seconds
+  - **Target duration** - automatically calculate interval so the timelapse is a specific length (e.g., always 30 seconds)
+- **Start delay** - configurable grace period before job creation, so brief/cancelled triggers are ignored
+- **Stop debounce** - configurable delay before stopping to prevent false triggers
+- **Exclude states** - temporary states that should not interrupt an active capture
+- **Tags** - apply ChronoSnap tags to jobs and videos
+- **Auto-cleanup** - optionally delete raw captures after the video is built
+- **Restart-safe** - active job IDs are persisted and restored on HA restart
 
 ## Installation
 
@@ -50,13 +50,13 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
 1. Go to **Settings** → **Devices & Services** → **Add Integration**
 2. Search for **ChronoSnap**
 3. Enter your ChronoSnap server URL and API key
-4. Click **Submit** — the connection will be validated
+4. Click **Submit** - the connection will be validated
 
 ## Adding Timelapse Profiles
 
 1. Go to **Settings** → **Devices & Services** → **ChronoSnap** → **Configure**
 2. Click **➕ Add new profile**
-3. **Step 1 — Profile Setup:**
+3. **Step 1 - Profile Setup:**
    - **Name:** A friendly name for this profile
    - **Camera stream URL:** RTSP/HTTP URL for the camera
    - **Stream type:** RTSP, HTTP, or local device
@@ -65,11 +65,11 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
    - **Exclude states:** Comma-separated states that should not interrupt capturing
    - **Start delay:** Seconds to wait before creating the job (0 for immediate)
    - **Stop debounce:** Seconds to wait before stopping (prevents false triggers from brief state changes)
-4. **Step 2 — Capture & Video Settings:**
+4. **Step 2 - Capture & Video Settings:**
    - **Interval mode:** Fixed or target duration
    - **Video framerate, quality, resolution**
    - **Auto-cleanup:** Delete raw captures after video is built
-5. *(If target duration mode)* **Step 3 — Target Duration:**
+5. *(If target duration mode)* **Step 3 - Target Duration:**
    - **Target video duration:** Desired timelapse length in seconds
    - **Duration source entity:** Entity whose state contains the total expected duration in seconds
 
