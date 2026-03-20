@@ -115,12 +115,27 @@ The minimum interval is always 10 seconds (enforced by ChronoSnap). Short-durati
 
 ## Sensors
 
+### Profile Sensors
+
 Each profile registers as a device and creates two sensors:
 
 | Sensor | Description |
 |---|---|
 | `sensor.chronosnap_<name>_status` | Current status: `idle`, `capturing`, `building_video`, `error` |
 | `sensor.chronosnap_<name>_captures` | Number of frames captured in the current job |
+
+### Server Sensors
+
+A "Server" device is created for each ChronoSnap instance with the following sensors (polled every 60 seconds):
+
+| Sensor | Description |
+|---|---|
+| `sensor.<instance>_server_total_jobs` | Total number of jobs on the server |
+| `sensor.<instance>_server_active_jobs` | Number of currently active jobs |
+| `sensor.<instance>_server_total_videos` | Total number of timelapse videos |
+| `sensor.<instance>_server_total_captures` | Total number of captured frames |
+| `sensor.<instance>_server_disk_free` | Free disk space in GB |
+| `sensor.<instance>_server_disk_used` | Used disk space in GB |
 
 ## How It Works
 
