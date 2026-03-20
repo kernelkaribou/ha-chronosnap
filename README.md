@@ -9,10 +9,13 @@ A Home Assistant custom integration that automatically creates [ChronoSnap](http
 Define **timelapse profiles** that watch any Home Assistant entity. When the entity enters a configured state, ChronoSnap automatically begins capturing frames from a camera stream. When the entity leaves that state, it builds a timelapse video and cleans up.
 
 **Example use cases:**
-- Timelapse any automated process by watching its status entity
-- Daily or scheduled timelapses triggered by a helper entity
-- Capture during specific conditions using any sensor state
-- Any state-driven event that HA can track
+- Timelapse every 3D print from start to finish, triggered by your printer's status entity
+- Capture what your dog gets up to when the house is detected as empty
+- Timelapse your backyard camera as a storm rolls through, triggered by a weather sensor
+- Record the full run of a CNC or laser cutter job, triggered by the machine's power sensor
+- Capture a daily sunrise or sunset from an outdoor camera using a sun elevation sensor
+- Timelapse your fish tank during scheduled feeding times
+- Timelapse your garage workbench whenever the garage door opens
 
 ## Features
 
@@ -22,7 +25,10 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
 - **Flexible intervals:**
   - **Fixed** — Capture every N seconds
   - **Target duration** — Automatically calculate interval so the timelapse is a specific length (e.g., always 30 seconds)
-- **Debounce** — Configurable delay before stopping to prevent false triggers
+- **Start delay** — Configurable grace period before job creation, so brief/cancelled triggers are ignored
+- **Stop debounce** — Configurable delay before stopping to prevent false triggers
+- **Exclude states** — Temporary states that should not interrupt an active capture
+- **Tags** — Apply ChronoSnap tags to jobs and videos
 - **Auto-cleanup** — Optionally delete raw captures after the video is built
 - **Restart-safe** — Active job IDs are persisted and restored on HA restart
 
@@ -58,7 +64,9 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
    - **Stream type:** RTSP, HTTP, or local device
    - **Trigger entity:** The HA entity to watch for state changes
    - **Active state:** The state value that triggers capture
-   - **Debounce:** Seconds to wait before stopping (prevents false triggers from brief state changes)
+   - **Exclude states:** Comma-separated states that should not interrupt capturing
+   - **Start delay:** Seconds to wait before creating the job (0 for immediate)
+   - **Stop debounce:** Seconds to wait before stopping (prevents false triggers from brief state changes)
 4. **Step 2 — Capture & Video Settings:**
    - **Interval mode:** Fixed or target duration
    - **Video framerate, quality, resolution**
@@ -82,6 +90,12 @@ Each profile creates two sensors:
 Entity enters active state
         │
         ▼
+  Wait start delay
+  (if configured)
+        │
+        ├── Entity leaves? → Cancel, no job created
+        │
+        ▼
   Calculate interval
   (fixed or from entity)
         │
@@ -89,7 +103,7 @@ Entity enters active state
   Create ChronoSnap job ──→ Frames captured automatically
         │
         │  Entity leaves active state
-        │  (after debounce delay)
+        │  (after stop debounce delay)
         ▼
   Complete the job
         │
