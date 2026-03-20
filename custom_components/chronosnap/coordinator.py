@@ -311,17 +311,12 @@ class ProfileCoordinator:
             if duration_entity:
                 state = self.hass.states.get(duration_entity)
                 if state and state.state not in ("unknown", "unavailable"):
-                    try:
-                        total_seconds = float(state.state)
-                        if total_seconds > 0:
-                            interval = int(total_seconds / target_frames)
-                            return max(interval, MIN_INTERVAL_SECONDS)
-                    except (ValueError, TypeError):
-                        _LOGGER.warning(
-                            "Cannot parse duration from %s (value: %s), using default",
-                            duration_entity,
-                            state.state,
-                        )
+                    total_seconds = self._parse_duration_value(
+                        state.state, duration_entity
+                    )
+                    if total_seconds and total_seconds > 0:
+                        interval = int(total_seconds / target_frames)
+                        return max(interval, MIN_INTERVAL_SECONDS)
 
             _LOGGER.warning(
                 "Duration entity unavailable, falling back to default interval"
@@ -331,6 +326,50 @@ class ProfileCoordinator:
             profile.get(CONF_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
             MIN_INTERVAL_SECONDS,
         )
+
+    @staticmethod
+    def _parse_duration_value(
+        value: str, entity_id: str
+    ) -> float | None:
+        """Parse a duration value that may be seconds or a datetime/timestamp.
+
+        Supports:
+        - Plain number (seconds remaining): "3600", "3600.5"
+        - ISO datetime (end time): "2026-03-20T18:00:00+00:00"
+        - HA datetime format: "2026-03-20 18:00:00"
+        """
+        # Try as a plain number first (seconds remaining)
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            pass
+
+        # Try as a datetime (finish/end timestamp)
+        now = datetime.now(timezone.utc)
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S%z",
+            "%Y-%m-%d %H:%M:%S",
+        ):
+            try:
+                end_time = datetime.strptime(value, fmt)
+                if end_time.tzinfo is None:
+                    end_time = end_time.replace(tzinfo=timezone.utc)
+                remaining = (end_time - now).total_seconds()
+                if remaining > 0:
+                    return remaining
+                return None
+            except ValueError:
+                continue
+
+        _LOGGER.warning(
+            "Cannot parse duration from %s (value: '%s') as seconds or datetime",
+            entity_id,
+            value,
+        )
+        return None
 
     # ── Stop capture & build video ──────────────────────────────
 

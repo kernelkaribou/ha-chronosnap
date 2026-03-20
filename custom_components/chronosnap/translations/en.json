@@ -93,7 +93,7 @@
         },
         "data_description": {
           "target_duration": "Desired length of the final timelapse video in seconds",
-          "duration_entity": "Entity whose state contains the total expected duration in seconds"
+          "duration_entity": "Entity whose state contains either the remaining duration in seconds or an estimated end/finish time"
         }
       }
     }
