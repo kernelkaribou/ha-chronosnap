@@ -150,7 +150,7 @@ Entity enters active state
   Poll until complete
         |
         v
-  Delete job (video preserved)
+  Delete job if auto-cleanup is enabled (video preserved)
 ```
 
 ## Requirements
