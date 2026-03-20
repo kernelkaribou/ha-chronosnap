@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ChronoSnapClient
@@ -41,6 +42,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
+    # Clean up entity registry for removed profiles
+    _cleanup_stale_entities(hass, entry, profiles)
+
     # Set up sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -48,6 +52,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
+
+
+def _cleanup_stale_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    profiles: dict[str, dict[str, Any]],
+) -> None:
+    """Remove entity registry entries for profiles that no longer exist."""
+    registry = er.async_get(hass)
+    entries = er.async_entries_for_config_entry(registry, entry.entry_id)
+
+    # Build set of valid unique_ids from current profiles
+    valid_unique_ids = set()
+    for profile_id in profiles:
+        valid_unique_ids.add(f"{DOMAIN}_{profile_id}_status")
+        valid_unique_ids.add(f"{DOMAIN}_{profile_id}_captures")
+
+    for entity_entry in entries:
+        if entity_entry.unique_id not in valid_unique_ids:
+            _LOGGER.info(
+                "Removing stale entity %s (profile deleted)",
+                entity_entry.entity_id,
+            )
+            registry.async_remove(entity_entry.entity_id)
 
 
 async def _async_update_listener(
