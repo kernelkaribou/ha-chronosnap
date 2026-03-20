@@ -12,10 +12,8 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
 - Timelapse every 3D print from start to finish, triggered by your printer's status entity
 - Capture what your dog gets up to when the house is detected as empty
 - Timelapse your backyard camera as a storm rolls through, triggered by a weather sensor
-- Record the full run of a CNC or laser cutter job, triggered by the machine's power sensor
 - Capture a daily sunrise or sunset from an outdoor camera using a sun elevation sensor
-- Timelapse your fish tank during scheduled feeding times
-- Timelapse your garage workbench whenever the garage door opens
+- Timelapse your garage workbench whenever a presence sensor detects someone in the shop
 
 ## Features
 
