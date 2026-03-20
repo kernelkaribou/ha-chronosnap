@@ -19,6 +19,7 @@ from .const import (
     CONF_DEBOUNCE_SECONDS,
     CONF_DURATION_ENTITY,
     CONF_EXCLUDE_STATES,
+    CONF_START_DELAY,
     CONF_FPS,
     CONF_INTERVAL_MODE,
     CONF_INTERVAL_SECONDS,
@@ -38,6 +39,7 @@ from .const import (
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_QUALITY,
     DEFAULT_RESOLUTION,
+    DEFAULT_START_DELAY,
     DEFAULT_TARGET_DURATION,
     DOMAIN,
     INTERVAL_MODE_TARGET,
@@ -78,6 +80,8 @@ class ProfileCoordinator:
         self._listeners: dict[str, CALLBACK_TYPE] = {}
         # profile_id → debounce timer handle
         self._debounce_timers: dict[str, asyncio.TimerHandle] = {}
+        # profile_id → start delay timer handle
+        self._start_delay_timers: dict[str, asyncio.TimerHandle] = {}
         # profile_id → video polling task
         self._video_tasks: dict[str, asyncio.Task] = {}
 
@@ -152,6 +156,10 @@ class ProfileCoordinator:
             timer.cancel()
         self._debounce_timers.clear()
 
+        for timer in self._start_delay_timers.values():
+            timer.cancel()
+        self._start_delay_timers.clear()
+
         for task in self._video_tasks.values():
             task.cancel()
         self._video_tasks.clear()
@@ -162,10 +170,38 @@ class ProfileCoordinator:
         """Create a state change event handler bound to a specific profile."""
         active_state = profile.get(CONF_ACTIVE_STATE, "").lower()
         debounce = profile.get(CONF_DEBOUNCE_SECONDS, DEFAULT_DEBOUNCE_SECONDS)
+        start_delay = profile.get(CONF_START_DELAY, DEFAULT_START_DELAY)
         exclude_raw = profile.get(CONF_EXCLUDE_STATES, "")
         exclude_states = {
             s.strip().lower() for s in exclude_raw.split(",") if s.strip()
         }
+
+        def _do_start() -> None:
+            """Fire the actual job start (called directly or after delay)."""
+            self._start_delay_timers.pop(profile_id, None)
+            self.hass.async_create_task(
+                self._handle_start(profile_id, profile)
+            )
+
+        def _schedule_stop() -> None:
+            """Schedule or immediately execute a job stop with debounce."""
+            timer = self._debounce_timers.pop(profile_id, None)
+            if timer:
+                timer.cancel()
+
+            if debounce > 0:
+                self._debounce_timers[profile_id] = (
+                    self.hass.loop.call_later(
+                        debounce,
+                        lambda: self.hass.async_create_task(
+                            self._handle_stop(profile_id, profile)
+                        ),
+                    )
+                )
+            else:
+                self.hass.async_create_task(
+                    self._handle_stop(profile_id, profile)
+                )
 
         @callback
         def _handler(event: Event) -> None:
@@ -178,18 +214,42 @@ class ProfileCoordinator:
             new_val = (new_state.state or "").lower()
             old_val = (old_state.state or "").lower() if old_state else ""
 
-            # Entity entered the active state → start capture
+            # Entity entered the active state → start capture (with optional delay)
             if new_val == active_state and old_val != active_state:
                 # Cancel any pending stop debounce
                 timer = self._debounce_timers.pop(profile_id, None)
                 if timer:
                     timer.cancel()
-                self.hass.async_create_task(
-                    self._handle_start(profile_id, profile)
-                )
 
-            # Entity left the active state → check if new state is excluded
+                if start_delay > 0:
+                    # Cancel any existing start delay timer
+                    existing = self._start_delay_timers.pop(profile_id, None)
+                    if existing:
+                        existing.cancel()
+                    _LOGGER.debug(
+                        "Profile %s: delaying start by %ds",
+                        profile_id,
+                        start_delay,
+                    )
+                    self._start_delay_timers[profile_id] = (
+                        self.hass.loop.call_later(start_delay, _do_start)
+                    )
+                else:
+                    _do_start()
+
+            # Entity left the active state
             elif old_val == active_state and new_val != active_state:
+                # If a start delay is pending, cancel it — job was never created
+                pending_start = self._start_delay_timers.pop(profile_id, None)
+                if pending_start:
+                    pending_start.cancel()
+                    _LOGGER.info(
+                        "Profile %s: cancelled pending start "
+                        "(entity left active state during start delay)",
+                        profile_id,
+                    )
+                    return
+
                 if new_val in exclude_states:
                     _LOGGER.debug(
                         "Profile %s: ignoring excluded state '%s'",
@@ -198,24 +258,7 @@ class ProfileCoordinator:
                     )
                     return
 
-                # Cancel any existing debounce
-                timer = self._debounce_timers.pop(profile_id, None)
-                if timer:
-                    timer.cancel()
-
-                if debounce > 0:
-                    self._debounce_timers[profile_id] = (
-                        self.hass.loop.call_later(
-                            debounce,
-                            lambda: self.hass.async_create_task(
-                                self._handle_stop(profile_id, profile)
-                            ),
-                        )
-                    )
-                else:
-                    self.hass.async_create_task(
-                        self._handle_stop(profile_id, profile)
-                    )
+                _schedule_stop()
 
             # Entity moved from an excluded state to another non-active state
             elif (
@@ -224,24 +267,7 @@ class ProfileCoordinator:
                 and new_val not in exclude_states
                 and profile_id in self.active_jobs
             ):
-                # Cancel any existing debounce
-                timer = self._debounce_timers.pop(profile_id, None)
-                if timer:
-                    timer.cancel()
-
-                if debounce > 0:
-                    self._debounce_timers[profile_id] = (
-                        self.hass.loop.call_later(
-                            debounce,
-                            lambda: self.hass.async_create_task(
-                                self._handle_stop(profile_id, profile)
-                            ),
-                        )
-                    )
-                else:
-                    self.hass.async_create_task(
-                        self._handle_stop(profile_id, profile)
-                    )
+                _schedule_stop()
 
         return _handler
 

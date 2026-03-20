@@ -41,6 +41,7 @@ from .const import (
     CONF_PROFILES,
     CONF_QUALITY,
     CONF_RESOLUTION,
+    CONF_START_DELAY,
     CONF_STREAM_TYPE,
     CONF_STREAM_URL,
     CONF_TAG_IDS,
@@ -53,6 +54,7 @@ from .const import (
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_QUALITY,
     DEFAULT_RESOLUTION,
+    DEFAULT_START_DELAY,
     DEFAULT_STREAM_TYPE,
     DEFAULT_TARGET_DURATION,
     DOMAIN,
@@ -300,6 +302,17 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
                         CONF_EXCLUDE_STATES,
                         default=existing.get(CONF_EXCLUDE_STATES, ""),
                     ): TextSelector(TextSelectorConfig()),
+                    vol.Required(
+                        CONF_START_DELAY,
+                        default=existing.get(
+                            CONF_START_DELAY, DEFAULT_START_DELAY
+                        ),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=0, max=600, step=1, mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="seconds",
+                        )
+                    ),
                     vol.Required(
                         CONF_DEBOUNCE_SECONDS,
                         default=existing.get(

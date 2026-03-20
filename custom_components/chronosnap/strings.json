@@ -48,6 +48,7 @@
           "trigger_entity": "Trigger entity",
           "active_state": "Active state",
           "exclude_states": "Exclude states",
+          "start_delay_seconds": "Start delay",
           "debounce_seconds": "Stop debounce delay"
         },
         "data_description": {
@@ -57,6 +58,7 @@
           "trigger_entity": "The entity to watch for state changes",
           "active_state": "Capture starts when the entity enters this state and stops when it leaves",
           "exclude_states": "Comma-separated states that should NOT trigger a stop. If the entity enters one of these states, capturing continues.",
+          "start_delay_seconds": "Seconds to wait before creating the job after the entity enters the active state. If the entity leaves the active state during this delay, the job is not created. Set to 0 for no delay.",
           "debounce_seconds": "Seconds to wait before stopping after the entity leaves the active state (prevents false triggers)"
         }
       },
