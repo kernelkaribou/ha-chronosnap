@@ -23,6 +23,8 @@ CONF_RESOLUTION = "resolution"
 CONF_AUTO_CLEANUP = "auto_cleanup"
 CONF_DEBOUNCE_SECONDS = "debounce_seconds"
 CONF_CAPTURE_QUALITY = "capture_quality"
+CONF_EXCLUDE_STATES = "exclude_states"
+CONF_TAG_IDS = "tag_ids"
 
 # Interval modes
 INTERVAL_MODE_FIXED = "fixed"

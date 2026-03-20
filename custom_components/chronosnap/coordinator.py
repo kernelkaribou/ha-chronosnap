@@ -18,6 +18,7 @@ from .const import (
     CONF_CAPTURE_QUALITY,
     CONF_DEBOUNCE_SECONDS,
     CONF_DURATION_ENTITY,
+    CONF_EXCLUDE_STATES,
     CONF_FPS,
     CONF_INTERVAL_MODE,
     CONF_INTERVAL_SECONDS,
@@ -27,6 +28,7 @@ from .const import (
     CONF_RESOLUTION,
     CONF_STREAM_TYPE,
     CONF_STREAM_URL,
+    CONF_TAG_IDS,
     CONF_TARGET_DURATION,
     CONF_TRIGGER_ENTITY,
     DEFAULT_AUTO_CLEANUP,
@@ -160,6 +162,10 @@ class ProfileCoordinator:
         """Create a state change event handler bound to a specific profile."""
         active_state = profile.get(CONF_ACTIVE_STATE, "").lower()
         debounce = profile.get(CONF_DEBOUNCE_SECONDS, DEFAULT_DEBOUNCE_SECONDS)
+        exclude_raw = profile.get(CONF_EXCLUDE_STATES, "")
+        exclude_states = {
+            s.strip().lower() for s in exclude_raw.split(",") if s.strip()
+        }
 
         @callback
         def _handler(event: Event) -> None:
@@ -182,8 +188,42 @@ class ProfileCoordinator:
                     self._handle_start(profile_id, profile)
                 )
 
-            # Entity left the active state → debounce then stop
+            # Entity left the active state → check if new state is excluded
             elif old_val == active_state and new_val != active_state:
+                if new_val in exclude_states:
+                    _LOGGER.debug(
+                        "Profile %s: ignoring excluded state '%s'",
+                        profile_id,
+                        new_val,
+                    )
+                    return
+
+                # Cancel any existing debounce
+                timer = self._debounce_timers.pop(profile_id, None)
+                if timer:
+                    timer.cancel()
+
+                if debounce > 0:
+                    self._debounce_timers[profile_id] = (
+                        self.hass.loop.call_later(
+                            debounce,
+                            lambda: self.hass.async_create_task(
+                                self._handle_stop(profile_id, profile)
+                            ),
+                        )
+                    )
+                else:
+                    self.hass.async_create_task(
+                        self._handle_stop(profile_id, profile)
+                    )
+
+            # Entity moved from an excluded state to another non-active state
+            elif (
+                old_val in exclude_states
+                and new_val != active_state
+                and new_val not in exclude_states
+                and profile_id in self.active_jobs
+            ):
                 # Cancel any existing debounce
                 timer = self._debounce_timers.pop(profile_id, None)
                 if timer:
@@ -235,6 +275,7 @@ class ProfileCoordinator:
                 capture_quality=profile.get(
                     CONF_CAPTURE_QUALITY, DEFAULT_CAPTURE_QUALITY
                 ),
+                tag_ids=profile.get(CONF_TAG_IDS),
             )
             job_id = job["id"]
             self.active_jobs[profile_id] = job_id
@@ -321,6 +362,7 @@ class ProfileCoordinator:
                 framerate=profile.get(CONF_FPS, DEFAULT_FPS),
                 quality=profile.get(CONF_QUALITY, DEFAULT_QUALITY),
                 resolution=profile.get(CONF_RESOLUTION, DEFAULT_RESOLUTION),
+                tag_ids=profile.get(CONF_TAG_IDS),
             )
             video_id = video["id"]
             _LOGGER.info(

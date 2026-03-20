@@ -47,6 +47,7 @@
           "stream_type": "Stream type",
           "trigger_entity": "Trigger entity",
           "active_state": "Active state",
+          "exclude_states": "Exclude states",
           "debounce_seconds": "Stop debounce delay"
         },
         "data_description": {
@@ -55,6 +56,7 @@
           "stream_type": "The protocol type of the camera stream",
           "trigger_entity": "The entity to watch for state changes",
           "active_state": "Capture starts when the entity enters this state and stops when it leaves (e.g., 'printing')",
+          "exclude_states": "Comma-separated states that should NOT trigger a stop (e.g., 'paused, filament_change'). If the entity enters one of these states, capturing continues.",
           "debounce_seconds": "Seconds to wait before stopping after the entity leaves the active state (prevents false triggers)"
         }
       },
@@ -68,7 +70,8 @@
           "quality": "Video quality",
           "capture_quality": "Capture image quality",
           "resolution": "Video resolution",
-          "auto_cleanup": "Auto-delete job after video is built"
+          "auto_cleanup": "Auto-delete job after video is built",
+          "tag_ids": "Tags"
         },
         "data_description": {
           "interval_mode": "Fixed: capture at a set interval. Target duration: calculate interval to produce a specific video length.",
@@ -77,7 +80,8 @@
           "quality": "Encoding quality for the output video",
           "capture_quality": "Image quality for each captured frame",
           "resolution": "Output video resolution (e.g., 1920x1080)",
-          "auto_cleanup": "When enabled, the capture job and its raw frames are automatically deleted after the video is built. The video itself is always preserved."
+          "auto_cleanup": "When enabled, the capture job and its raw frames are automatically deleted after the video is built. The video itself is always preserved.",
+          "tag_ids": "ChronoSnap tags to apply to the job and video"
         }
       },
       "profile_target": {

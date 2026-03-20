@@ -25,7 +25,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .api import ChronoSnapAuthError, ChronoSnapClient, ChronoSnapConnectionError
+from .api import ChronoSnapAuthError, ChronoSnapClient, ChronoSnapConnectionError, ChronoSnapError
 from .const import (
     CONF_ACTIVE_STATE,
     CONF_API_KEY,
@@ -33,6 +33,7 @@ from .const import (
     CONF_CAPTURE_QUALITY,
     CONF_DEBOUNCE_SECONDS,
     CONF_DURATION_ENTITY,
+    CONF_EXCLUDE_STATES,
     CONF_FPS,
     CONF_INTERVAL_MODE,
     CONF_INTERVAL_SECONDS,
@@ -42,6 +43,7 @@ from .const import (
     CONF_RESOLUTION,
     CONF_STREAM_TYPE,
     CONF_STREAM_URL,
+    CONF_TAG_IDS,
     CONF_TARGET_DURATION,
     CONF_TRIGGER_ENTITY,
     DEFAULT_AUTO_CLEANUP,
@@ -146,6 +148,7 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
             config_entry.options.get(CONF_PROFILES, {})
         )
         self._editing_profile_id: str | None = None
+        self._available_tags: list[dict[str, Any]] = []
 
     # ── Main menu ───────────────────────────────────────────
 
@@ -304,6 +307,10 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
                         CONF_ACTIVE_STATE,
                         default=existing.get(CONF_ACTIVE_STATE, ""),
                     ): TextSelector(TextSelectorConfig()),
+                    vol.Optional(
+                        CONF_EXCLUDE_STATES,
+                        default=existing.get(CONF_EXCLUDE_STATES, ""),
+                    ): TextSelector(TextSelectorConfig()),
                     vol.Required(
                         CONF_DEBOUNCE_SECONDS,
                         default=existing.get(
@@ -326,6 +333,10 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Configure capture interval and video settings."""
         if user_input is not None:
+            # Convert tag_ids from list of strings to list of ints
+            raw_tags = user_input.get(CONF_TAG_IDS, [])
+            if raw_tags:
+                user_input[CONF_TAG_IDS] = [int(t) for t in raw_tags]
             self._profiles[self._editing_profile_id].update(user_input)
             interval_mode = user_input.get(CONF_INTERVAL_MODE, INTERVAL_MODE_FIXED)
 
@@ -337,90 +348,122 @@ class ChronoSnapOptionsFlow(config_entries.OptionsFlow):
 
         existing = self._profiles.get(self._editing_profile_id, {})
 
+        # Fetch available tags from ChronoSnap
+        tag_options = []
+        try:
+            url = self.config_entry.data[CONF_URL]
+            api_key = self.config_entry.data[CONF_API_KEY]
+            client = ChronoSnapClient(url, api_key)
+            try:
+                self._available_tags = await client.get_tags()
+                tag_options = [
+                    {"value": str(t["id"]), "label": t["name"]}
+                    for t in self._available_tags
+                ]
+            finally:
+                await client.close()
+        except Exception:
+            _LOGGER.warning("Could not fetch tags from ChronoSnap")
+
+        # Build schema fields
+        schema_fields: dict[vol.Marker, Any] = {
+            vol.Required(
+                CONF_INTERVAL_MODE,
+                default=existing.get(CONF_INTERVAL_MODE, INTERVAL_MODE_FIXED),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        {
+                            "value": INTERVAL_MODE_FIXED,
+                            "label": "Fixed interval",
+                        },
+                        {
+                            "value": INTERVAL_MODE_TARGET,
+                            "label": "Target video duration (calculate interval from entity)",
+                        },
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_INTERVAL_SECONDS,
+                default=existing.get(
+                    CONF_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS
+                ),
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=10, max=3600, step=1, mode=NumberSelectorMode.BOX,
+                    unit_of_measurement="seconds",
+                )
+            ),
+            vol.Required(
+                CONF_FPS,
+                default=existing.get(CONF_FPS, DEFAULT_FPS),
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=1, max=60, step=1, mode=NumberSelectorMode.BOX,
+                    unit_of_measurement="fps",
+                )
+            ),
+            vol.Required(
+                CONF_QUALITY,
+                default=existing.get(CONF_QUALITY, DEFAULT_QUALITY),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        {"value": QUALITY_LOW, "label": "Low"},
+                        {"value": QUALITY_MEDIUM, "label": "Medium"},
+                        {"value": QUALITY_HIGH, "label": "High"},
+                        {"value": QUALITY_MAXIMUM, "label": "Maximum"},
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
+                CONF_CAPTURE_QUALITY,
+                default=existing.get(
+                    CONF_CAPTURE_QUALITY, DEFAULT_CAPTURE_QUALITY
+                ),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        {"value": QUALITY_LOW, "label": "Low"},
+                        {"value": QUALITY_MEDIUM, "label": "Medium"},
+                        {"value": QUALITY_HIGH, "label": "High"},
+                        {"value": QUALITY_MAXIMUM, "label": "Maximum"},
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
+                CONF_RESOLUTION,
+                default=existing.get(CONF_RESOLUTION, DEFAULT_RESOLUTION),
+            ): TextSelector(TextSelectorConfig()),
+            vol.Required(
+                CONF_AUTO_CLEANUP,
+                default=existing.get(
+                    CONF_AUTO_CLEANUP, DEFAULT_AUTO_CLEANUP
+                ),
+            ): bool,
+        }
+
+        # Only show tag selector if tags exist in ChronoSnap
+        if tag_options:
+            existing_tags = [str(t) for t in existing.get(CONF_TAG_IDS, [])]
+            schema_fields[vol.Optional(
+                CONF_TAG_IDS,
+                default=existing_tags,
+            )] = SelectSelector(
+                SelectSelectorConfig(
+                    options=tag_options,
+                    multiple=True,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+
         return self.async_show_form(
             step_id="profile_capture",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_INTERVAL_MODE,
-                        default=existing.get(CONF_INTERVAL_MODE, INTERVAL_MODE_FIXED),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                {
-                                    "value": INTERVAL_MODE_FIXED,
-                                    "label": "Fixed interval",
-                                },
-                                {
-                                    "value": INTERVAL_MODE_TARGET,
-                                    "label": "Target video duration (calculate interval from entity)",
-                                },
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_INTERVAL_SECONDS,
-                        default=existing.get(
-                            CONF_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=10, max=3600, step=1, mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="seconds",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_FPS,
-                        default=existing.get(CONF_FPS, DEFAULT_FPS),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=1, max=60, step=1, mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="fps",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_QUALITY,
-                        default=existing.get(CONF_QUALITY, DEFAULT_QUALITY),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                {"value": QUALITY_LOW, "label": "Low"},
-                                {"value": QUALITY_MEDIUM, "label": "Medium"},
-                                {"value": QUALITY_HIGH, "label": "High"},
-                                {"value": QUALITY_MAXIMUM, "label": "Maximum"},
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Required(
-                        CONF_CAPTURE_QUALITY,
-                        default=existing.get(
-                            CONF_CAPTURE_QUALITY, DEFAULT_CAPTURE_QUALITY
-                        ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                {"value": QUALITY_LOW, "label": "Low"},
-                                {"value": QUALITY_MEDIUM, "label": "Medium"},
-                                {"value": QUALITY_HIGH, "label": "High"},
-                                {"value": QUALITY_MAXIMUM, "label": "Maximum"},
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Required(
-                        CONF_RESOLUTION,
-                        default=existing.get(CONF_RESOLUTION, DEFAULT_RESOLUTION),
-                    ): TextSelector(TextSelectorConfig()),
-                    vol.Required(
-                        CONF_AUTO_CLEANUP,
-                        default=existing.get(
-                            CONF_AUTO_CLEANUP, DEFAULT_AUTO_CLEANUP
-                        ),
-                    ): bool,
-                }
-            ),
+            data_schema=vol.Schema(schema_fields),
         )
 
     # ── Profile setup step 3 (optional): target duration settings ─

@@ -108,6 +108,7 @@ class ChronoSnapClient:
         framerate: int = 30,
         capture_quality: str = "high",
         capture_resolution: str = "native",
+        tag_ids: list[int] | None = None,
     ) -> dict[str, Any]:
         """Create a new capture job."""
         payload = {
@@ -120,6 +121,8 @@ class ChronoSnapClient:
             "capture_quality": capture_quality,
             "capture_resolution": capture_resolution,
         }
+        if tag_ids:
+            payload["tag_ids"] = tag_ids
         return await self._request("POST", "/jobs/", json=payload)
 
     async def get_job(self, job_id: int) -> dict[str, Any]:
@@ -149,6 +152,7 @@ class ChronoSnapClient:
         framerate: int = 30,
         quality: str = "high",
         resolution: str = "1920x1080",
+        tag_ids: list[int] | None = None,
     ) -> dict[str, Any]:
         """Create a timelapse video from job captures."""
         payload = {
@@ -158,6 +162,8 @@ class ChronoSnapClient:
             "quality": quality,
             "resolution": resolution,
         }
+        if tag_ids:
+            payload["tag_ids"] = tag_ids
         return await self._request("POST", "/videos/", json=payload)
 
     async def get_video(self, video_id: int) -> dict[str, Any]:
@@ -192,3 +198,10 @@ class ChronoSnapClient:
             "GET", f"/captures/job/{job_id}/count"
         )
         return result.get("count", 0) if result else 0
+
+    # ── Tags ────────────────────────────────────────────────────
+
+    async def get_tags(self) -> list[dict[str, Any]]:
+        """Get all available tags."""
+        result = await self._request("GET", "/tags/")
+        return result if isinstance(result, list) else []
