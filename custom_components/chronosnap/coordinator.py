@@ -11,7 +11,7 @@ from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, State, callb
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 
-from .api import ChronoSnapClient, ChronoSnapError
+from .api import ChronoSnapClient, ChronoSnapConnectionError, ChronoSnapError
 from .const import (
     CONF_ACTIVE_STATE,
     CONF_AUTO_CLEANUP,
@@ -95,7 +95,6 @@ class ProfileCoordinator:
         data = await self._store.async_load()
         if data and isinstance(data, dict):
             stored_jobs = data.get(self.entry_id, {})
-            # Validate that stored jobs still exist in ChronoSnap
             for profile_id, job_id in stored_jobs.items():
                 try:
                     job = await self.client.get_job(job_id)
@@ -107,6 +106,26 @@ class ProfileCoordinator:
                             job_id,
                             profile_id,
                         )
+                    else:
+                        _LOGGER.info(
+                            "Stored job %s for profile %s is no longer active "
+                            "(status: %s), discarding",
+                            job_id,
+                            profile_id,
+                            job.get("status", "unknown") if job else "missing",
+                        )
+                except ChronoSnapConnectionError:
+                    # API unreachable at startup - keep the stored job ID so
+                    # we don't lose track of a potentially running job.
+                    self.active_jobs[profile_id] = job_id
+                    self.profile_status[profile_id] = STATUS_CAPTURING
+                    _LOGGER.warning(
+                        "ChronoSnap API unavailable at startup. "
+                        "Keeping stored job %s for profile %s. "
+                        "It will be managed once the API is reachable.",
+                        job_id,
+                        profile_id,
+                    )
                 except ChronoSnapError:
                     _LOGGER.warning(
                         "Stored job %s for profile %s no longer exists",
@@ -271,6 +290,10 @@ class ProfileCoordinator:
 
         return _handler
 
+    # Maximum retries for stop operations before giving up
+    STOP_MAX_RETRIES = 3
+    STOP_RETRY_DELAY = 10  # seconds between retries
+
     # ── Start capture ───────────────────────────────────────────
 
     async def _handle_start(
@@ -316,8 +339,29 @@ class ProfileCoordinator:
                 name,
                 interval,
             )
+
+            # Guard against race condition: if the entity left the active
+            # state while we were awaiting the API call, trigger a stop now.
+            entity_id = profile.get(CONF_TRIGGER_ENTITY)
+            active_state = profile.get(CONF_ACTIVE_STATE, "").lower()
+            if entity_id:
+                current = self.hass.states.get(entity_id)
+                if current and (current.state or "").lower() != active_state:
+                    _LOGGER.info(
+                        "Profile %s: entity already left active state "
+                        "during job creation, stopping immediately",
+                        profile_id,
+                    )
+                    await self._handle_stop(profile_id, profile)
+
         except ChronoSnapError as err:
             _LOGGER.error("Failed to create job for profile %s: %s", name, err)
+            self.profile_status[profile_id] = STATUS_ERROR
+            self._fire_update()
+        except Exception:
+            _LOGGER.exception(
+                "Unexpected error creating job for profile %s", name
+            )
             self.profile_status[profile_id] = STATUS_ERROR
             self._fire_update()
 
@@ -402,7 +446,12 @@ class ProfileCoordinator:
     async def _handle_stop(
         self, profile_id: str, profile: dict[str, Any]
     ) -> None:
-        """Complete the job, build a video, and optionally clean up."""
+        """Complete the job, build a video, and optionally clean up.
+
+        Retries on transient API failures to avoid orphaning active jobs
+        on ChronoSnap. The job is only removed from active_jobs once the
+        complete call succeeds (or retries are exhausted).
+        """
         job_id = self.active_jobs.get(profile_id)
         if job_id is None:
             _LOGGER.debug("No active job for profile %s on stop", profile_id)
@@ -411,12 +460,49 @@ class ProfileCoordinator:
         name = profile.get(CONF_PROFILE_NAME, profile_id)
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        try:
-            # 1. Complete the job
-            await self.client.complete_job(job_id, now_iso)
-            _LOGGER.info("Completed job %s for profile %s", job_id, name)
+        # Step 1: Complete the job with retries
+        completed = False
+        for attempt in range(1, self.STOP_MAX_RETRIES + 1):
+            try:
+                await self.client.complete_job(job_id, now_iso)
+                _LOGGER.info("Completed job %s for profile %s", job_id, name)
+                completed = True
+                break
+            except ChronoSnapError as err:
+                _LOGGER.warning(
+                    "Failed to complete job %s for profile %s "
+                    "(attempt %d/%d): %s",
+                    job_id,
+                    name,
+                    attempt,
+                    self.STOP_MAX_RETRIES,
+                    err,
+                )
+                if attempt < self.STOP_MAX_RETRIES:
+                    await asyncio.sleep(self.STOP_RETRY_DELAY)
+            except Exception:
+                _LOGGER.exception(
+                    "Unexpected error completing job %s for profile %s",
+                    job_id,
+                    name,
+                )
+                break
 
-            # 2. Start video build
+        if not completed:
+            _LOGGER.error(
+                "Could not complete job %s for profile %s after %d attempts. "
+                "Job may still be running on ChronoSnap. "
+                "Keeping job tracked for next stop attempt.",
+                job_id,
+                name,
+                self.STOP_MAX_RETRIES,
+            )
+            self.profile_status[profile_id] = STATUS_ERROR
+            self._fire_update()
+            return
+
+        # Step 2: Build video
+        try:
             self.profile_status[profile_id] = STATUS_BUILDING
             self._fire_update()
 
@@ -434,7 +520,7 @@ class ProfileCoordinator:
                 "Started video build %s for profile %s", video_id, name
             )
 
-            # 3. Poll for completion in background
+            # Step 3: Poll for completion in background
             task = self.hass.async_create_task(
                 self._poll_and_cleanup(profile_id, profile, job_id, video_id)
             )
@@ -442,10 +528,24 @@ class ProfileCoordinator:
 
         except ChronoSnapError as err:
             _LOGGER.error(
-                "Failed to complete/build video for profile %s: %s", name, err
+                "Failed to build video for profile %s: %s. "
+                "Job %s was completed but video was not created. "
+                "You can build the video manually in ChronoSnap.",
+                name,
+                err,
+                job_id,
             )
-            self.profile_status[profile_id] = STATUS_ERROR
+            # Job is completed (captures stopped), safe to release
             self.active_jobs.pop(profile_id, None)
+            self.profile_status[profile_id] = STATUS_ERROR
+            await self._async_save()
+            self._fire_update()
+        except Exception:
+            _LOGGER.exception(
+                "Unexpected error building video for profile %s", name
+            )
+            self.active_jobs.pop(profile_id, None)
+            self.profile_status[profile_id] = STATUS_ERROR
             await self._async_save()
             self._fire_update()
 
@@ -479,20 +579,43 @@ class ProfileCoordinator:
                     name,
                 )
 
-            # 4. Delete job (preserves video)
             if auto_cleanup:
-                await self.client.delete_job(job_id)
-                _LOGGER.info(
-                    "Deleted job %s for profile %s (video preserved)",
-                    job_id,
-                    name,
-                )
+                try:
+                    await self.client.delete_job(job_id)
+                    _LOGGER.info(
+                        "Deleted job %s for profile %s (video preserved)",
+                        job_id,
+                        name,
+                    )
+                except ChronoSnapError as err:
+                    _LOGGER.warning(
+                        "Failed to auto-cleanup job %s for profile %s: %s. "
+                        "Job can be deleted manually in ChronoSnap.",
+                        job_id,
+                        name,
+                        err,
+                    )
 
+        except asyncio.CancelledError:
+            _LOGGER.info(
+                "Video polling cancelled for profile %s (HA shutting down). "
+                "Video %s will continue building on ChronoSnap.",
+                name,
+                video_id,
+            )
+            raise
         except ChronoSnapError as err:
             _LOGGER.error(
-                "Error during video poll/cleanup for profile %s: %s",
+                "Error during video polling for profile %s: %s. "
+                "Video %s may still be building on ChronoSnap.",
                 name,
                 err,
+                video_id,
+            )
+        except Exception:
+            _LOGGER.exception(
+                "Unexpected error during video polling for profile %s",
+                name,
             )
         finally:
             self.active_jobs.pop(profile_id, None)

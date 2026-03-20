@@ -85,6 +85,10 @@ class ChronoSnapClient:
                         f"API error {resp.status}: {text}"
                     )
                 return await resp.json()
+        except asyncio.TimeoutError as err:
+            raise ChronoSnapConnectionError(
+                f"Timeout connecting to ChronoSnap at {self._base_url}"
+            ) from err
         except aiohttp.ClientError as err:
             raise ChronoSnapConnectionError(
                 f"Unable to connect to ChronoSnap at {self._base_url}: {err}"
