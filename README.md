@@ -1,12 +1,12 @@
-# ChronoSnap for Home Assistant
+# <img src="https://raw.githubusercontent.com/kernelkaribou/ha-chronosnap/main/custom_components/chronosnap/brand/icon.png" width="48" align="top" /> + <img src="https://brands.home-assistant.io/homeassistant/icon.png" width="48" align="top" /> ChronoSnap for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
-A Home Assistant custom integration that automatically creates [ChronoSnap](https://github.com/kernelkaribou/chronosnap) timelapses based on entity state changes.
+A Home Assistant custom integration for [ChronoSnap](https://github.com/kernelkaribou/chronosnap) that turns entity state changes into automated timelapses.
 
 ## What It Does
 
-Define **timelapse profiles** that watch any Home Assistant entity. When the entity enters a configured state, ChronoSnap automatically begins capturing frames from a camera stream. When the entity leaves that state, it builds a timelapse video and cleans up.
+ChronoSnap for Home Assistant watches your entities and automatically manages timelapse capture jobs. An entity enters a configured state, the integration creates a capture job on your ChronoSnap server, frames are captured at a calculated interval, and when the entity leaves that state the job is completed, a timelapse video is built, and raw captures are cleaned up. Everything is hands-off once configured.
 
 **Example use cases:**
 - Timelapse every 3D print from start to finish, triggered by your printer's status entity
@@ -18,24 +18,27 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
 ## Features
 
 - **UI-based configuration** - no YAML editing required
-- **Entity & state selectors** - pick entities from dropdowns
-- **Multiple profiles** - run different timelapses simultaneously
-- **Flexible intervals:**
-  - **Fixed** - capture every N seconds
-  - **Target duration** - automatically calculate interval so the timelapse is a specific length (e.g., always 30 seconds)
-- **Start delay** - configurable grace period before job creation, so brief/cancelled triggers are ignored
-- **Stop debounce** - configurable delay before stopping to prevent false triggers
-- **Exclude states** - temporary states that should not interrupt an active capture
-- **Tags** - apply ChronoSnap tags to jobs and videos
-- **Auto-cleanup** - optionally delete raw captures after the video is built
-- **Restart-safe** - active job IDs are persisted and restored on HA restart
+- **Entity & state selectors** - pick any entity and define trigger states from dropdowns
+- **Multiple profiles** - run different timelapses simultaneously on different cameras
+- **Flexible capture intervals:**
+  - **Fixed** - capture every N seconds (minimum 10s)
+  - **Target duration** - automatically calculate the interval from a duration entity so the final video is a specific length
+- **Start delay** - configurable grace period before creating a job, cancels if the entity leaves the active state during the delay
+- **Stop debounce** - configurable delay before stopping to prevent false triggers from brief state changes
+- **Exclude states** - define temporary states that should not interrupt an active capture
+- **Tags** - apply ChronoSnap tags to jobs and videos (fetched from your server)
+- **Capture and video quality** - independent quality settings for captured frames and output video
+- **Resolution control** - set the output video resolution
+- **Auto-cleanup** - optionally delete the capture job and raw frames after the video is built (video is always preserved)
+- **Per-profile devices** - each profile appears as a device in Home Assistant with status and capture count sensors
+- **Restart-safe** - active job IDs are persisted and restored across HA restarts
 
 ## Installation
 
 ### HACS (Recommended)
 
 1. Open HACS in Home Assistant
-2. Go to **Integrations** → **⋮** (top right) → **Custom repositories**
+2. Go to **Integrations** > top-right menu > **Custom repositories**
 3. Add `https://github.com/kernelkaribou/ha-chronosnap` as an **Integration**
 4. Click **Install**
 5. Restart Home Assistant
@@ -47,35 +50,74 @@ Define **timelapse profiles** that watch any Home Assistant entity. When the ent
 
 ## Setup
 
-1. Go to **Settings** → **Devices & Services** → **Add Integration**
+### Connecting to ChronoSnap
+
+1. Go to **Settings** > **Devices & Services** > **Add Integration**
 2. Search for **ChronoSnap**
 3. Enter your ChronoSnap server URL and API key
-4. Click **Submit** - the connection will be validated
+4. Click **Submit** to validate the connection
 
-## Adding Timelapse Profiles
+### Adding a Timelapse Profile
 
-1. Go to **Settings** → **Devices & Services** → **ChronoSnap** → **Configure**
-2. Click **➕ Add new profile**
-3. **Step 1 - Profile Setup:**
-   - **Name:** A friendly name for this profile
-   - **Camera stream URL:** RTSP/HTTP URL for the camera
-   - **Stream type:** RTSP, HTTP, or local device
-   - **Trigger entity:** The HA entity to watch for state changes
-   - **Active state:** The state value that triggers capture
-   - **Exclude states:** Comma-separated states that should not interrupt capturing
-   - **Start delay:** Seconds to wait before creating the job (0 for immediate)
-   - **Stop debounce:** Seconds to wait before stopping (prevents false triggers from brief state changes)
-4. **Step 2 - Capture & Video Settings:**
-   - **Interval mode:** Fixed or target duration
-   - **Video framerate, quality, resolution**
-   - **Auto-cleanup:** Delete raw captures after video is built
-5. *(If target duration mode)* **Step 3 - Target Duration:**
-   - **Target video duration:** Desired timelapse length in seconds
-   - **Duration source entity:** Entity whose state contains the total expected duration in seconds
+1. Go to **Settings** > **Devices & Services** > **ChronoSnap** > &#9881; (configure)
+2. Select **Add new profile**
+3. Complete the profile setup form (see [Configuration Reference](#configuration-reference) below)
+4. Complete the capture and video settings form
+5. If using target duration mode, complete the target duration form
+6. The profile is saved automatically and begins listening for state changes immediately
+
+### Editing or Deleting a Profile
+
+1. Go to **Settings** > **Devices & Services** > **ChronoSnap** > &#9881; (configure)
+2. Select the profile name from the list
+3. Choose **Edit** or **Delete**
+
+## Configuration Reference
+
+### Profile Setup (Step 1)
+
+| Field | Description | Default |
+|---|---|---|
+| **Profile name** | A friendly name for this timelapse profile | Required |
+| **Camera stream URL** | The RTSP, HTTP, or device URL for the camera | Required |
+| **Stream type** | Protocol type: RTSP, HTTP/HTTPS, or Local device | RTSP |
+| **Trigger entity** | The Home Assistant entity to watch for state changes | Required |
+| **Active state** | The state value that starts capturing. Capturing stops when the entity leaves this state. | Required |
+| **Exclude states** | Comma-separated list of states that should NOT trigger a stop. Useful for temporary intermediate states. | Empty |
+| **Start delay** | Seconds to wait after the entity enters the active state before creating the job. If the entity leaves the active state during this window, the job is never created. | 0 |
+| **Stop debounce** | Seconds to wait after the entity leaves the active state before stopping the job. Prevents false triggers from brief state fluctuations. | 10 |
+
+### Capture & Video Settings (Step 2)
+
+| Field | Description | Default |
+|---|---|---|
+| **Interval mode** | **Fixed** uses a static capture interval. **Target duration** calculates the interval from a duration entity to produce a video of a specific length. | Fixed |
+| **Capture interval** | Seconds between frame captures (fixed mode only, minimum 10s) | 30 |
+| **Video framerate** | Frames per second for the output timelapse video | 30 |
+| **Video quality** | Encoding quality for the output video: Low, Medium, High, Maximum | High |
+| **Capture image quality** | Image quality for each captured frame: Low, Medium, High, Maximum | High |
+| **Video resolution** | Output video resolution as WxH | 1920x1080 |
+| **Auto-cleanup** | When enabled, the capture job and its raw frames are deleted after the video is built. The video is always preserved. | On |
+| **Tags** | ChronoSnap tags to apply to the job and video. Only shown if tags exist on your ChronoSnap server. | None |
+
+### Target Duration Settings (Step 3, if applicable)
+
+| Field | Description | Default |
+|---|---|---|
+| **Target video duration** | Desired length of the final timelapse video in seconds | 30 |
+| **Duration source entity** | Entity whose state represents either the remaining time in seconds or an estimated finish time (datetime). The integration auto-detects the format. | Required |
+
+The capture interval is calculated as:
+
+```
+interval = duration_entity_value / (target_duration x fps)
+```
+
+The minimum interval is always 10 seconds (enforced by ChronoSnap). Short-duration processes may produce videos shorter than the target.
 
 ## Sensors
 
-Each profile creates two sensors:
+Each profile registers as a device and creates two sensors:
 
 | Sensor | Description |
 |---|---|
@@ -86,48 +128,32 @@ Each profile creates two sensors:
 
 ```
 Entity enters active state
-        │
-        ▼
-  Wait start delay
-  (if configured)
-        │
-        ├── Entity leaves? → Cancel, no job created
-        │
-        ▼
-  Calculate interval
-  (fixed or from entity)
-        │
-        ▼
-  Create ChronoSnap job ──→ Frames captured automatically
-        │
-        │  Entity leaves active state
-        │  (after stop debounce delay)
-        ▼
+        |
+        v
+  Wait start delay (if configured)
+        |
+        +-- Entity leaves? -> Cancel, no job created
+        |
+        v
+  Calculate interval (fixed or from duration entity)
+        |
+        v
+  Create ChronoSnap job --> Frames captured automatically
+        |
+        |  Entity leaves active state
+        |  (after stop debounce delay)
+        v
   Complete the job
-        │
-        ▼
+        |
+        v
   Build timelapse video
-        │
-        ▼
+        |
+        v
   Poll until complete
-        │
-        ▼
+        |
+        v
   Delete job (video preserved)
 ```
-
-## Target Duration Mode
-
-Instead of a fixed capture interval, you can specify a desired video length. The integration calculates the interval automatically:
-
-```
-interval = total_time_seconds / (target_duration × fps)
-```
-
-For example, with a 4-hour process, target of 30s at 30fps:
-- Total frames needed: 30 × 30 = 900
-- Interval: 14400 / 900 = 16 seconds
-
-The minimum interval is always 10 seconds (enforced by ChronoSnap).
 
 ## Requirements
 
