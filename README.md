@@ -31,6 +31,31 @@ A Home Assistant custom integration for [ChronoSnap](https://github.com/kernelka
 - **Per-profile devices** - each profile appears as a device in Home Assistant with status and capture count sensors
 - **Restart-safe** - active job IDs are persisted and restored across HA restarts
 
+## Screenshots
+
+Screenshot example for 3D printing timelapse
+
+- Connect to Chronosnap
+
+![Connect to ChronoSnap](./screenshots/connect.png)
+
+- Create a profile
+
+![Create Profile](./screenshots/profiles.png)
+
+- Configure Profile
+
+![Configure Profile](./screenshots/profile_1.png)
+
+- Configure timelapse intervals
+
+![Configure timelapse intervals](./screenshots/profile_2.png)
+
+- Sensors for HA monitoring
+
+![Sensors for HA monitoring](./screenshots/sensors.png)
+
+
 ## Installation
 
 ### HACS (Recommended)
