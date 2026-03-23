@@ -201,3 +201,7 @@ logger:
 ## License
 
 MIT
+
+## Disclaimer
+
+This integration was built using AI. Some people get upset so felt it should be known. I built for myself but would love if it became useful in the community. Do with it what you will.
