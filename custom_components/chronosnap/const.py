@@ -7,6 +7,7 @@ CONF_URL = "url"
 CONF_API_KEY = "api_key"
 CONF_INSTANCE_NAME = "instance_name"
 CONF_PROFILES = "profiles"
+CONF_ENABLED = "enabled"
 
 # Profile keys
 CONF_PROFILE_NAME = "name"
@@ -22,6 +23,7 @@ CONF_FPS = "fps"
 CONF_QUALITY = "quality"
 CONF_RESOLUTION = "resolution"
 CONF_AUTO_CLEANUP = "auto_cleanup"
+CONF_PRESERVE_FAILED_FRAMES = "preserve_failed_frames"
 CONF_START_DELAY = "start_delay_seconds"
 CONF_DEBOUNCE_SECONDS = "debounce_seconds"
 CONF_CAPTURE_QUALITY = "capture_quality"
@@ -42,6 +44,9 @@ STATUS_IDLE = "idle"
 STATUS_CAPTURING = "capturing"
 STATUS_BUILDING = "building_video"
 STATUS_ERROR = "error"
+STATUS_DISABLED = "disabled"
+STATUS_STARTING = "waiting_to_start"
+STATUS_STOPPING = "waiting_to_stop"
 
 # Video quality options
 QUALITY_LOW = "low"
@@ -58,6 +63,7 @@ DEFAULT_RESOLUTION = "1920x1080"
 DEFAULT_DEBOUNCE_SECONDS = 10
 DEFAULT_START_DELAY = 0
 DEFAULT_AUTO_CLEANUP = True
+DEFAULT_PRESERVE_FAILED_FRAMES = True
 DEFAULT_CAPTURE_QUALITY = QUALITY_HIGH
 DEFAULT_STREAM_TYPE = STREAM_TYPE_RTSP
 
@@ -70,6 +76,7 @@ VIDEO_POLL_TIMEOUT = 3600  # max seconds to wait for video build (1 hour)
 
 # Server stats polling
 SERVER_STATS_POLL_INTERVAL = 60  # seconds between stats updates
+PROFILE_POLL_INTERVAL = 30
 
 # Storage
 STORAGE_KEY = f"{DOMAIN}_active_jobs"
