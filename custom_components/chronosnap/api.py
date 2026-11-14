@@ -25,6 +25,18 @@ class ChronoSnapAuthError(ChronoSnapError):
     """Raised when API key is invalid."""
 
 
+class ChronoSnapNotFoundError(ChronoSnapError):
+    """Raised when a requested resource no longer exists."""
+
+
+class ChronoSnapAPIError(ChronoSnapError):
+    """An HTTP error with a status code suitable for retry decisions."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(f"ChronoSnap returned HTTP {status}")
+
+
 class ChronoSnapClient:
     """Async client for the ChronoSnap REST API."""
 
@@ -62,7 +74,7 @@ class ChronoSnapClient:
         method: str,
         path: str,
         json: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Make an API request to ChronoSnap."""
         session = await self._get_session()
         url = f"{self._base_url}/api{path}"
@@ -75,30 +87,45 @@ class ChronoSnapClient:
                 json=json,
                 timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT),
             ) as resp:
-                if resp.status == 401:
+                if resp.status in (401, 403):
                     raise ChronoSnapAuthError("Invalid API key")
+                if resp.status == 404:
+                    raise ChronoSnapNotFoundError("ChronoSnap resource not found")
                 if resp.status == 204:
                     return None
                 if resp.status >= 400:
-                    text = await resp.text()
-                    raise ChronoSnapError(
-                        f"API error {resp.status}: {text}"
-                    )
+                    raise ChronoSnapAPIError(resp.status)
                 return await resp.json()
-        except asyncio.TimeoutError as err:
-            raise ChronoSnapConnectionError(
-                f"Timeout connecting to ChronoSnap at {self._base_url}"
-            ) from err
+        except TimeoutError as err:
+            raise ChronoSnapConnectionError("Timeout connecting to ChronoSnap") from err
+        except aiohttp.ContentTypeError as err:
+            raise ChronoSnapError("ChronoSnap returned a non-JSON response") from err
         except aiohttp.ClientError as err:
-            raise ChronoSnapConnectionError(
-                f"Unable to connect to ChronoSnap at {self._base_url}: {err}"
-            ) from err
+            raise ChronoSnapConnectionError("Unable to connect to ChronoSnap") from err
+        except ValueError as err:
+            raise ChronoSnapError("ChronoSnap returned invalid JSON") from err
+
+    async def _get_object(
+        self, method: str, path: str, json: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        result = await self._request(method, path, json)
+        if not isinstance(result, dict):
+            raise ChronoSnapError("Expected an object from ChronoSnap")
+        return result
+
+    async def _get_list(self, path: str) -> list[dict[str, Any]]:
+        result = await self._request("GET", path)
+        if not isinstance(result, list) or not all(
+            isinstance(item, dict) for item in result
+        ):
+            raise ChronoSnapError("Expected a list of objects from ChronoSnap")
+        return result
 
     # ── Connection ──────────────────────────────────────────────
 
     async def test_connection(self) -> dict[str, Any]:
         """Test connection and auth by fetching version info."""
-        return await self._request("GET", "/settings/version")
+        return await self._get_object("GET", "/settings/version")
 
     # ── Jobs ────────────────────────────────────────────────────
 
@@ -127,21 +154,19 @@ class ChronoSnapClient:
         }
         if tag_ids:
             payload["tag_ids"] = tag_ids
-        return await self._request("POST", "/jobs/", json=payload)
+        return await self._get_object("POST", "/jobs/", json=payload)
 
     async def get_job(self, job_id: int) -> dict[str, Any]:
         """Get job details."""
-        return await self._request("GET", f"/jobs/{job_id}")
+        return await self._get_object("GET", f"/jobs/{job_id}")
 
-    async def complete_job(
-        self, job_id: int, end_datetime: str
-    ) -> dict[str, Any]:
+    async def complete_job(self, job_id: int, end_datetime: str) -> dict[str, Any]:
         """Mark a job as completed."""
         payload = {
             "status": "completed",
             "end_datetime": end_datetime,
         }
-        return await self._request("PATCH", f"/jobs/{job_id}", json=payload)
+        return await self._get_object("PATCH", f"/jobs/{job_id}", json=payload)
 
     async def delete_job(self, job_id: int) -> None:
         """Delete a job and its captures (videos are preserved)."""
@@ -168,11 +193,11 @@ class ChronoSnapClient:
         }
         if tag_ids:
             payload["tag_ids"] = tag_ids
-        return await self._request("POST", "/videos/", json=payload)
+        return await self._get_object("POST", "/videos/", json=payload)
 
     async def get_video(self, video_id: int) -> dict[str, Any]:
         """Get video status and details."""
-        return await self._request("GET", f"/videos/{video_id}")
+        return await self._get_object("GET", f"/videos/{video_id}")
 
     async def poll_video_until_complete(
         self,
@@ -181,48 +206,60 @@ class ChronoSnapClient:
         timeout: int = 3600,
     ) -> dict[str, Any]:
         """Poll video status until completed or failed."""
-        elapsed = 0
-        while elapsed < timeout:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
             video = await self.get_video(video_id)
             status = video.get("status", "")
             if status in ("completed", "failed"):
                 return video
-            await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
+            await asyncio.sleep(
+                min(poll_interval, max(0, deadline - asyncio.get_running_loop().time()))
+            )
 
-        raise ChronoSnapError(
-            f"Video {video_id} did not complete within {timeout}s"
-        )
+        raise ChronoSnapError(f"Video {video_id} did not complete within {timeout}s")
 
     # ── Captures ────────────────────────────────────────────────
 
     async def get_capture_count(self, job_id: int) -> int:
         """Get the number of captures for a job."""
-        result = await self._request(
-            "GET", f"/captures/job/{job_id}/count"
-        )
-        return result.get("count", 0) if result else 0
+        result = await self._get_object("GET", f"/captures/job/{job_id}/count")
+        count = result.get("count")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise ChronoSnapError("Invalid capture count from ChronoSnap")
+        return count
 
     # ── Tags ────────────────────────────────────────────────────
 
     async def get_tags(self) -> list[dict[str, Any]]:
         """Get all available tags."""
-        result = await self._request("GET", "/tags/")
-        return result if isinstance(result, list) else []
+        tags = await self._get_list("/tags/")
+        if any(
+            isinstance(tag.get("id"), bool)
+            or not isinstance(tag.get("id"), int)
+            or tag["id"] <= 0
+            or not isinstance(tag.get("name"), str)
+            or not tag["name"]
+            for tag in tags
+        ):
+            raise ChronoSnapError("Invalid tags returned by ChronoSnap")
+        return tags
 
     # ── Server stats ───────────────────────────────────────────
 
     async def get_storage_stats(self) -> dict[str, Any]:
         """Get server storage statistics."""
-        result = await self._request("GET", "/storage/stats")
-        return result or {}
+        return await self._get_object("GET", "/storage/stats")
 
-    async def get_jobs(
-        self, status: str | None = None
-    ) -> list[dict[str, Any]]:
+    async def get_jobs(self, status: str | None = None) -> list[dict[str, Any]]:
         """List jobs, optionally filtered by status."""
-        path = "/jobs/"
-        if status:
-            path = f"/jobs/?status={status}"
-        result = await self._request("GET", path)
-        return result if isinstance(result, list) else []
+        jobs: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            path = f"/jobs/?limit=1000&offset={offset}"
+            if status:
+                path += f"&status={status}"
+            page = await self._get_list(path)
+            jobs.extend(page)
+            if len(page) < 1000:
+                return jobs
+            offset += len(page)

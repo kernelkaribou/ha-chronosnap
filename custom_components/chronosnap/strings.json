@@ -14,15 +14,32 @@
           "url": "The base URL of your ChronoSnap instance (e.g., http://192.168.1.100:5000)",
           "api_key": "Found in ChronoSnap Settings → API Key"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to ChronoSnap",
+        "description": "Enter a valid API key. Profiles and tracked recordings will be preserved.",
+        "data": {"api_key": "API key"}
+      },
+      "reconfigure": {
+        "title": "Update server connection",
+        "description": "Update the URL or API key. Finish tracked recordings before changing the server URL.",
+        "data": {"url": "Server URL", "api_key": "API key"}
       }
     },
     "error": {
       "cannot_connect": "Unable to connect to ChronoSnap server. Check the URL and ensure the server is running.",
       "invalid_auth": "Invalid API key. Check your API key in ChronoSnap Settings.",
-      "unknown": "An unexpected error occurred."
+      "unknown": "An unexpected error occurred.",
+      "required": "Enter a value.",
+      "invalid_server_url": "Enter an HTTP or HTTPS base URL without embedded credentials, query parameters, or a fragment.",
+      "recordings_pending": "Disarm pending starts and finish or recover all tracked recordings before changing the server URL.",
+      "reload_failed": "Connection details were saved, but the integration could not reload. Check Home Assistant logs and retry."
     },
     "abort": {
-      "already_configured": "This ChronoSnap server is already configured."
+      "already_configured": "This ChronoSnap server is already configured.",
+      "reauth_successful": "Reconnected to ChronoSnap.",
+      "reconfigure_successful": "Server connection updated.",
+      "entry_missing": "This integration entry no longer exists."
     }
   },
   "options": {
@@ -40,10 +57,26 @@
           "action": "What would you like to do?"
         }
       },
+      "profile_enabled_conflict": {
+        "title": "Confirm Automatic timelapse",
+        "description": "Automatic timelapse changed while this dialog was open. Your other edits have not been saved. The checkbox shows the current live setting. Choose its final value to save your edits, or cancel to leave the profile unchanged.",
+        "data": {"enabled": "Automatic timelapse"}
+      },
+      "profile_delete": {
+        "title": "Delete profile",
+        "description": "Deleting disarms this profile and stops its active recording. A video will be built from its frames and the recording's saved cleanup policy will apply, including its failed-build retention setting. Existing videos are preserved. If the server cannot stop capture, deletion is blocked and the profile stays disabled.",
+        "data": {"confirm": "Delete this profile"}
+      },
+      "connection": {
+        "title": "Update server connection",
+        "description": "Update the URL or API key. Finish tracked recordings before changing the server URL.",
+        "data": {"url": "Server URL", "api_key": "API key"}
+      },
       "profile_basic": {
         "title": "Profile Setup",
         "description": "Configure the stream source and trigger entity for this profile.",
         "data": {
+          "enabled": "Automatic timelapse",
           "name": "Profile name",
           "stream_url": "Camera stream URL",
           "stream_type": "Stream type",
@@ -54,11 +87,12 @@
           "debounce_seconds": "Stop debounce delay"
         },
         "data_description": {
+          "enabled": "Arm this profile for future trigger transitions. Turning it off stops an active recording and builds its video. Turning it on does not start an already-active process; use Start now for that.",
           "name": "A friendly name for this timelapse profile",
           "stream_url": "The RTSP, HTTP, or device URL for the camera",
           "stream_type": "The protocol type of the camera stream",
           "trigger_entity": "The entity to watch for state changes",
-          "active_state": "Capture starts when the entity enters this state and stops when it leaves",
+          "active_state": "Use the raw state from Developer Tools > States (not a translated display label). Capture starts on entry and stops on exit.",
           "exclude_states": "Comma-separated states that should NOT trigger a stop. If the entity enters one of these states, capturing continues.",
           "start_delay_seconds": "Seconds to wait before creating the job after the entity enters the active state. If the entity leaves the active state during this delay, the job is not created. Set to 0 for no delay.",
           "debounce_seconds": "Seconds to wait before stopping after the entity leaves the active state (prevents false triggers)"
@@ -66,7 +100,7 @@
       },
       "profile_capture": {
         "title": "Capture & Video Settings",
-        "description": "Configure how frames are captured and how the timelapse video is built.",
+        "description": "Configure how frames are captured and how the timelapse video is built.\n\n{tag_warning}",
         "data": {
           "interval_mode": "Interval mode",
           "interval_seconds": "Capture interval (for fixed mode)",
@@ -75,6 +109,7 @@
           "capture_quality": "Capture image quality",
           "resolution": "Video resolution",
           "auto_cleanup": "Auto-delete job after video is built",
+          "preserve_failed_frames": "Preserve frames if video building fails",
           "tag_ids": "Tags"
         },
         "data_description": {
@@ -84,7 +119,8 @@
           "quality": "Encoding quality for the output video",
           "capture_quality": "Image quality for each captured frame",
           "resolution": "Output video resolution (e.g., 1920x1080)",
-          "auto_cleanup": "When enabled, the capture job and its raw frames are automatically deleted after the video is built. The video itself is always preserved.",
+          "auto_cleanup": "Delete the job and raw frames after a successful video build. The failed-build retention setting controls cleanup after a confirmed failure. When off, frames are always kept.",
+          "preserve_failed_frames": "On by default. Keep frames for recovery after a confirmed failed build. Turn off to delete them when auto-cleanup is enabled; the failed recording cannot then be rebuilt. Connection errors and unknown build states never trigger deletion.",
           "tag_ids": "ChronoSnap tags to apply to the job and video"
         }
       },
@@ -97,9 +133,33 @@
         },
         "data_description": {
           "target_duration": "Desired length of the final timelapse video in seconds",
-          "duration_entity": "Entity whose state contains either the remaining duration in seconds or an estimated end/finish time"
+          "duration_entity": "A numeric duration in seconds, minutes, or hours (using the entity's unit), or an ISO finish time. Numbers without a unit mean seconds; timezone-free finish times use Home Assistant's time zone."
         }
       }
+    },
+    "error": {
+      "required": "Enter a value.",
+      "invalid_name": "Use a name of at most 80 characters containing more than filename punctuation.",
+      "invalid_stream_url": "Enter a valid RTSP/HTTP URL, or /dev/videoN for a local device, matching the selected stream type.",
+      "active_excluded": "The active state cannot also be an excluded state.",
+      "invalid_resolution": "Enter positive dimensions as WIDTHxHEIGHT, for example 1920x1080.",
+      "invalid_server_url": "Enter an HTTP or HTTPS base URL without embedded credentials, query parameters, or a fragment.",
+      "invalid_auth": "The API key is invalid.",
+      "cannot_connect": "Unable to connect to ChronoSnap.",
+      "already_configured": "This server is already configured.",
+      "recordings_pending": "Disarm pending starts and finish or recover all tracked recordings before changing the server URL.",
+      "reload_failed": "Connection details were saved, but the integration could not reload. Check Home Assistant logs and retry.",
+      "integration_not_loaded": "Load the integration before deleting a profile so its server job can be stopped safely.",
+      "cannot_stop": "The server job could not be stopped. The profile remains disabled. Check ChronoSnap and retry deletion."
+    }
+  },
+  "entity": {
+    "switch": {
+      "automatic_timelapse": {"name": "Automatic timelapse"}
+    },
+    "button": {
+      "start_now": {"name": "Start now"},
+      "retry_recovery": {"name": "Retry recovery"}
     }
   }
 }

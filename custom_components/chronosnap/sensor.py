@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -11,8 +10,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfInformation
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -21,54 +19,29 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import (
     CONF_ACTIVE_STATE,
-    CONF_INSTANCE_NAME,
-    CONF_PROFILE_NAME,
     CONF_PROFILES,
-    CONF_STREAM_URL,
     CONF_TRIGGER_ENTITY,
-    CONF_URL,
     DOMAIN,
     STATUS_BUILDING,
     STATUS_CAPTURING,
+    STATUS_DISABLED,
     STATUS_ERROR,
     STATUS_IDLE,
+    STATUS_STARTING,
+    STATUS_STOPPING,
 )
 from .coordinator import ProfileCoordinator
-
-_LOGGER = logging.getLogger(__name__)
+from .entity import ChronoSnapProfileEntity, server_device_info
 
 STATUS_ICONS = {
     STATUS_IDLE: "mdi:camera-off",
     STATUS_CAPTURING: "mdi:camera",
     STATUS_BUILDING: "mdi:movie-open",
     STATUS_ERROR: "mdi:alert-circle",
+    STATUS_DISABLED: "mdi:camera-off",
+    STATUS_STARTING: "mdi:timer-sand",
+    STATUS_STOPPING: "mdi:timer-sand",
 }
-
-
-def _device_info(entry: ConfigEntry, profile_id: str, profile: dict[str, Any]) -> DeviceInfo:
-    """Build DeviceInfo for a timelapse profile."""
-    name = profile.get(CONF_PROFILE_NAME, profile_id)
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{entry.entry_id}_{profile_id}")},
-        name=name,
-        manufacturer="ChronoSnap",
-        model="Timelapse Profile",
-        configuration_url=entry.data.get("url"),
-        entry_type=None,
-    )
-
-
-def _server_device_info(entry: ConfigEntry) -> DeviceInfo:
-    """Build DeviceInfo for the ChronoSnap server."""
-    instance_name = entry.data.get(CONF_INSTANCE_NAME, "ChronoSnap")
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{entry.entry_id}_server")},
-        name=f"{instance_name} Server",
-        manufacturer="ChronoSnap",
-        model="Server",
-        configuration_url=entry.data.get(CONF_URL),
-        entry_type=None,
-    )
 
 
 async def async_setup_entry(
@@ -86,9 +59,7 @@ async def async_setup_entry(
 
     # Profile sensors
     for profile_id, profile in profiles.items():
-        entities.append(
-            ChronoSnapStatusSensor(coordinator, entry, profile_id, profile)
-        )
+        entities.append(ChronoSnapStatusSensor(coordinator, entry, profile_id, profile))
         entities.append(
             ChronoSnapCaptureCountSensor(coordinator, entry, profile_id, profile)
         )
@@ -104,7 +75,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class ChronoSnapStatusSensor(SensorEntity):
+class ChronoSnapStatusSensor(ChronoSnapProfileEntity, SensorEntity):
     """Sensor showing the current status of a timelapse profile."""
 
     _attr_has_entity_name = True
@@ -116,21 +87,16 @@ class ChronoSnapStatusSensor(SensorEntity):
         profile_id: str,
         profile: dict[str, Any],
     ) -> None:
-        self._coordinator = coordinator
-        self._profile_id = profile_id
-        self._profile = profile
+        super().__init__(coordinator, entry, profile_id, profile)
 
         self._attr_unique_id = f"{DOMAIN}_{profile_id}_status"
         self._attr_name = "Status"
         self._attr_icon = STATUS_ICONS.get(STATUS_IDLE, "mdi:camera")
-        self._attr_device_info = _device_info(entry, profile_id, profile)
 
     @property
     def native_value(self) -> str:
         """Return the current profile status."""
-        return self._coordinator.profile_status.get(
-            self._profile_id, STATUS_IDLE
-        )
+        return self._coordinator.status(self._profile_id)
 
     @property
     def icon(self) -> str:
@@ -142,32 +108,28 @@ class ChronoSnapStatusSensor(SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
         job_id = self._coordinator.active_jobs.get(self._profile_id)
+        recording = self._coordinator.recordings.get(self._profile_id)
+        retained = len(
+            self._coordinator.failed_recordings.get(self._profile_id, [])
+        ) + int(recording is not None and recording.phase == "failed")
         return {
             "profile_id": self._profile_id,
             "trigger_entity": self._profile.get(CONF_TRIGGER_ENTITY),
             "active_state": self._profile.get(CONF_ACTIVE_STATE),
             "active_job_id": job_id,
+            "automatic_timelapse_enabled": self._coordinator.is_enabled(
+                self._profile_id
+            ),
+            "tracked_job_id": recording.job_id if recording else None,
+            "last_job_id": self._coordinator.last_jobs.get(self._profile_id),
+            "last_video_id": self._coordinator.last_videos.get(self._profile_id),
+            "last_error": self._coordinator.last_errors.get(self._profile_id)
+            or ("Retained failed builds await recovery" if retained else None),
+            "retained_failed_builds": retained,
         }
 
-    async def async_added_to_hass(self) -> None:
-        """Register update callback."""
-        self._coordinator.register_update_callback(
-            self._handle_coordinator_update
-        )
 
-    async def async_will_remove_from_hass(self) -> None:
-        """Unregister update callback."""
-        self._coordinator.unregister_update_callback(
-            self._handle_coordinator_update
-        )
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from coordinator."""
-        self.async_write_ha_state()
-
-
-class ChronoSnapCaptureCountSensor(SensorEntity):
+class ChronoSnapCaptureCountSensor(ChronoSnapProfileEntity, SensorEntity):
     """Sensor showing the capture count for the active job."""
 
     _attr_has_entity_name = True
@@ -179,42 +141,24 @@ class ChronoSnapCaptureCountSensor(SensorEntity):
         profile_id: str,
         profile: dict[str, Any],
     ) -> None:
-        self._coordinator = coordinator
-        self._profile_id = profile_id
-        self._profile = profile
+        super().__init__(coordinator, entry, profile_id, profile)
 
         self._attr_unique_id = f"{DOMAIN}_{profile_id}_captures"
         self._attr_name = "Captures"
         self._attr_icon = "mdi:image-multiple"
         self._attr_native_unit_of_measurement = "frames"
-        self._attr_device_info = _device_info(entry, profile_id, profile)
 
     @property
-    def native_value(self) -> int:
+    def native_value(self) -> int | None:
         """Return the current capture count."""
-        return self._coordinator.capture_counts.get(self._profile_id, 0)
+        if self._profile_id not in self._coordinator.recordings:
+            return 0
+        return self._coordinator.capture_counts.get(self._profile_id)
 
     @property
     def available(self) -> bool:
-        """Only available when actively capturing."""
-        return self._profile_id in self._coordinator.active_jobs
-
-    async def async_added_to_hass(self) -> None:
-        """Register update callback."""
-        self._coordinator.register_update_callback(
-            self._handle_coordinator_update
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Unregister update callback."""
-        self._coordinator.unregister_update_callback(
-            self._handle_coordinator_update
-        )
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from coordinator."""
-        self.async_write_ha_state()
+        """Idle is a valid zero count; failed live reads are unavailable."""
+        return self.native_value is not None
 
 
 # ── Server stats sensors ────────────────────────────────────────
@@ -224,7 +168,7 @@ def _bytes_to_gb(value: int | None) -> float | None:
     """Convert bytes to gigabytes."""
     if value is None:
         return None
-    return round(value / (1024 ** 3), 2)
+    return round(value / (1024**3), 2)
 
 
 class ChronoSnapServerSensor(CoordinatorEntity, SensorEntity):
@@ -239,7 +183,7 @@ class ChronoSnapServerSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_device_info = _server_device_info(entry)
+        self._attr_device_info = server_device_info(entry)
 
 
 class ChronoSnapTotalJobsSensor(ChronoSnapServerSensor):
